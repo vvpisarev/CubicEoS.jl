@@ -1,17 +1,20 @@
 using CubicEoSDatabase
 
 """
-  load(BrusilovskyEoSComponent; name, physdb)
+    load(BrusilovskyEoSComponent; name::AbstractString[, physics_db::ComponentDatabase, eos_db::ComponentDatabase])
 
-Returns `BrusilovskyEoSComponent` by loading its parameters from database.
+Returns `BrusilovskyEoSComponent` named `name` by loading its parameters from
+
+- database of physical properties `physics_db` (default is `CubicEoSDatabase.Data.martinez()`);
+- database of eos properties `eos_db` (default is `CubicEoSDatabase.Data.brusilovsky_comp()`).
 """
-function load(::Type{<:BrusilovskyEoSComponent}; name::AbstractString, physics_db::AbstractString, eos_db::AbstractString)
-    # load physical parameters: crit temp, crit press, acentric
-    comp_phys = ComponentDatabase(physics_db)
-    comp_eos = ComponentDatabase(eos_db)
-    
-    phys = getentry(comp_phys, name)
-    eos = getentry(comp_eos, name)
+function load(::Type{<:BrusilovskyEoSComponent};
+        name::AbstractString,
+        physics_db::ComponentDatabase=Data.martinez(),
+        eos_db::ComponentDatabase=Data.brusilovsky_comp()
+    )
+    phys = getentry(physics_db, name)
+    eos = getentry(eos_db, name)
     return __load_brusilovsky_comp__(; phys..., eos...)
 end
 
@@ -88,16 +91,23 @@ function __load_brusilovsky_comp__(name::AbstractString,
             )
 end
 
+"""
+    load(BrusilovskyEoSMixture; names[, comp_physics_db::ComponentDatabase, comp_eos_db::ComponentDatabase, mix_eos_db::MixtureDatabase])
+
+Returns `BrusilovskyEoSMixture` of `names` by loading parameters from
+
+- database of physical properties `physics_db`. Default is `CubicEoSDatabase.Data.martinez()`;
+- database of eos properties `eos_db`. Default is `CubicEoSDatabase.Data.brusilovsky_comp()`;
+- database of eos binary interaction parameters `mix_eos_db`. Default is `CubicEoSDatabase.Data.brusilovsky_mix()`.
+"""
 function load(::Type{<:BrusilovskyEoSMixture};
               names,
-              comp_physics_db::AbstractString,
-              comp_eos_db::AbstractString,
-              mix_eos_db::AbstractString)
-    # load physical parameters: crit temp, crit press, acentric
+              comp_physics_db::ComponentDatabase=Data.martinez(),
+              comp_eos_db::ComponentDatabase=Data.brusilovsky_comp(),
+              mix_eos_db::MixtureDatabase=Data.brusilovsky_mix())
     
     components = [load(BrusilovskyEoSComponent, name = name, physics_db = comp_physics_db, eos_db = comp_eos_db) for name in names]
-    mix_eos = MixtureDatabase(mix_eos_db)
-    corrections = getmatrix(mix_eos, names)
+    corrections = getmatrix(mix_eos_db, names)
     return BrusilovskyEoSMixture(;
                 components = components,
                 corrections...)

@@ -25,7 +25,7 @@ function load(
     comp_properties = foldl(
         (dict, db) -> merge!(dict, getentry(db, name)),
         component_dbs;
-        init = Dict{Symbol, Any}())
+        init = Dict{Symbol, Any}()
     )
 
     return __load_brusilovsky_comp__(; comp_properties...)

@@ -24,18 +24,20 @@ function __load_brusilovsky_comp__(; name::AbstractString,
                           critical_temperature,
                           critical_pressure,
                           acentric_factor,
-                          critical_compressibility,
-                          critical_omega,
-                          psi)
+                          eos_critical_compressibility,
+                          eos_critical_omega,
+                          eos_psi,
+                          extra_kw...  # unneeded keywords to construct component
+    )
     __load_brusilovsky_comp__(name,
         molecular_mass,
         number_carbons,
         critical_temperature,
         critical_pressure,
         acentric_factor,
-        critical_compressibility,
-        critical_omega,
-        psi)
+        eos_critical_compressibility,
+        eos_critical_omega,
+        eos_psi)
 end
 
 function __load_brusilovsky_comp__(name::AbstractString,

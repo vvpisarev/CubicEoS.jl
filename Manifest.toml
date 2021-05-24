@@ -2,11 +2,11 @@
 
 [[CubicEoSDatabase]]
 deps = ["DelimitedFiles"]
-git-tree-sha1 = "e70a0b8a5c6629bb4dbc141ea689b4470f22ce09"
+git-tree-sha1 = "d1dfa611195badc7a7b85137b9b6b0f2ca703d86"
 repo-rev = "master"
 repo-url = "https://gitlab.com/stepanzh/cubiceosdatabase.jl"
 uuid = "8742253c-1987-415f-b31d-1ec9670d9ed7"
-version = "0.2.0"
+version = "0.2.2"
 
 [[DelimitedFiles]]
 deps = ["Mmap"]

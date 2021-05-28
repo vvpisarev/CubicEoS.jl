@@ -125,7 +125,7 @@ function eos_parameters!(aij::AbstractMatrix,
 
     temp = RT / GAS_CONSTANT_SI - 273.16
     eij, gij, hij = mixture.eij, mixture.gij, mixture.hij
-    aij .= (one(T) .- eij .- temp .* gij .+ (temp^2) .* hij) .* sqrt.(ai .* ai')
+    aij .= (one(T) .- (eij .+ temp .* (gij .+ temp .* hij))) .* sqrt.(ai .* ai')
     # WARNING: at least Julia 1.4 is required for 3-argument `dot`
     Am = dot(nmol, aij, nmol)
     return Am, Bm, Cm, Dm, aij

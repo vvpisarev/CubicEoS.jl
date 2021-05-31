@@ -12,7 +12,6 @@ struct StabilityBuffer{M, P}
 end
 
 function StabilityBuffer(mix::BrusilovskyEoSMixture{T}) where {T}
-    nc = ncomponents(mix)
     parent_phase = ()
     test_phase = ()
     return StabilityBuffer(mix, parent_phase, test_phase)
@@ -29,17 +28,20 @@ end
 <- D_min (NaN if not converged)
 """
 function vt_stability_optim_try!(
-        optmethod,
-        η_::AbstractVector,  # вектор концентраций, должен быть инициализирован начальными значениями
-        grad_::AbstractVector,
-        Dfunc!::Function,  # функция D вида D!(η', ∇D_) -> D::Number
-        maxstep::Function,
-    ) where {T}
+    optmethod,
+    η_::AbstractVector,  # вектор концентраций, должен быть инициализирован начальными значениями
+    grad_::AbstractVector,
+    Dfunc!::Function,  # функция D вида D!(η', ∇D_) -> D::Number
+    maxstep::Function,
+)
 
     is_converged = false
 
     try
-        result = DescentMethods.optimize!(optmethod, Dfunc!, η_,
+        result = DescentMethods.optimize!(
+            optmethod,
+            Dfunc!,
+            η_,
             gtol=1e-3,
             maxiter=1000,
             constrain_step=maxstep,
@@ -66,7 +68,8 @@ function vt_stability(
     mix::BrusilovskyEoSMixture,
     nmol::AbstractVector,
     volume,
-    RT)
+    RT
+)
 
     nc = length(mix)
     jacobian_test = zeros(nc, nc)
@@ -77,16 +80,16 @@ function vt_stability(
 
     aux1, aux2 = similar(nmol), similar(nmol)
 
-    log_activity!(loga_parent, aux1, aij, mix, nmol, volume, RT)
+    log_activity(mix, nmol, volume, RT; log_a = loga_parent, ai = aux1, aij = aij)
     loga_parent .+= log.(nmol ./ volume)
-    p_parent = pressure!(aij, aux1, mix, nmol, volume, RT)
+    p_parent = pressure(mix, nmol, volume, RT; aij = aij, ai = aux1)
 
     thresh = -1e-5
 
     b = [comp.b for comp in components(mix)]
     function stabilitytest!(nmol_test, grad)
-        log_activity!(grad, aux1, aij, mix, nmol_test, 1, RT)
-        p_test = pressure!(aij, aux1, mix, nmol_test, 1, RT)
+        log_activity(mix, nmol_test, 1, RT; log_a = grad, ai = aux1, aij = aij)
+        p_test = pressure(mix, nmol_test, 1, RT; aij = aij, ai = aux1)
         grad .+= log.(nmol_test)
         grad .-= loga_parent
         D = dot(grad, nmol_test) - (p_test - p_parent) / RT
@@ -120,7 +123,17 @@ function vt_stability(
     z_gg = compressibility(mix, nmol_test, p_init, RT, 'g')
     ntest_gg = nmol_test .* (p_init / (z_gg * RT * sum(nmol_test)))
 
-    _, jacobian_test = log_activity_wj!(loga_test, jacobian_test, aij, aux1, aux2, mix, ntest_gg, 1, RT)
+    _, jacobian_test = log_activity_wj(
+        mix,
+        ntest_gg,
+        1,
+        RT;
+        log_a = loga_test,
+        jacobian = jacobian_test,
+        aij = aij,
+        aux1 = aux1,
+        aux2 = aux2
+    )
     for i in 1:nc
         jacobian_test[i,i] += 1 / ntest_gg[i]
     end
@@ -136,7 +149,17 @@ function vt_stability(
     z_gl = compressibility(mix, nmol_test, p_init, RT, 'l')
     ntest_gl = nmol_test .* (p_init / (z_gl * RT * sum(nmol_test)))
 
-    _, jacobian_test = log_activity_wj!(loga_test, jacobian_test, aij, aux1, aux2, mix, ntest_gl, 1, RT)
+    _, jacobian_test = log_activity_wj(
+        mix,
+        ntest_gl,
+        1,
+        RT;
+        log_a = loga_test,
+        jacobian = jacobian_test,
+        aij = aij,
+        aux1 = aux1,
+        aux2 = aux2
+    )
     for i in 1:nc
         jacobian_test[i,i] += 1 / ntest_gl[i]
     end
@@ -153,11 +176,21 @@ function vt_stability(
     p_init = dot(p_sat, nmol_test)
 
     # Test - gas
-    
+
     z_lg = compressibility(mix, nmol_test, p_init, RT, 'g')
     ntest_lg = nmol_test .* (p_init / (z_lg * RT * sum(nmol_test)))
 
-    _, jacobian_test = log_activity_wj!(loga_test, jacobian_test, aij, aux1, aux2, mix, ntest_lg, 1, RT)
+    _, jacobian_test = log_activity_wj(
+        mix,
+        ntest_lg,
+        1,
+        RT;
+        log_a = loga_test,
+        jacobian = jacobian_test,
+        aij = aij,
+        aux1 = aux1,
+        aux2 = aux2
+    )
     for i in 1:nc
         jacobian_test[i,i] += 1 / ntest_lg[i]
     end
@@ -173,7 +206,17 @@ function vt_stability(
     z_ll = compressibility(mix, nmol_test, p_init, RT, 'l')
     ntest_ll = nmol_test .* (p_init / (z_ll * RT * sum(nmol_test)))
 
-    _, jacobian_test = log_activity_wj!(loga_test, jacobian_test, aij, aux1, aux2, mix, ntest_ll, 1, RT)
+    _, jacobian_test = log_activity_wj(
+        mix,
+        ntest_ll,
+        1,
+        RT;
+        log_a = loga_test,
+        jacobian = jacobian_test,
+        aij = aij,
+        aux1 = aux1,
+        aux2 = aux2
+    )
     for i in 1:nc
         jacobian_test[i,i] += 1 / ntest_ll[i]
     end

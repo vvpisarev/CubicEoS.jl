@@ -24,12 +24,13 @@ function log_activity(
     nmol::AbstractVector,
     volume::Real,
     RT::Real;
-    buffers...
+    kwargs...
 ) where {T}
 
     nc = ncomponents(mix)
     ∑mol = sum(nmol)
 
+    buffers = kwargs.data
     aij = haskey(buffers, :aij) ? buffers[:aij] : Matrix{T}(undef, nc, nc)
     ai = haskey(buffers, :ai) ? buffers[:ai] : Vector{T}(undef, nc)
     log_a = haskey(buffers, :log_a) ? buffers[:log_a] : Vector{T}(undef, nc)
@@ -69,9 +70,10 @@ function log_activity_wj(
     nmol::AbstractVector,
     volume::Real,
     RT::Real;
-    buffers...
+    kwargs...
 ) where {T}
     nc = ncomponents(mix)
+    buffers = kwargs.data
     jacobian = haskey(buffers, :jacobian) ? buffers[:jacobian] : Matrix{T}(undef, nc, nc)
     aij = haskey(buffers, :aij) ? buffers[:aij] : Matrix{T}(undef, nc, nc)
     log_a = haskey(buffers, :log_a) ? buffers[:log_a] : Vector{T}(undef, nc)

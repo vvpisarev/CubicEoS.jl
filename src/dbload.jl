@@ -144,7 +144,8 @@ function load(
     components = [
         load(
             BrusilovskyEoSComponent;
-            name = name, component_dbs = component_dbs
+            name = name,
+            component_dbs = component_dbs
         ) for name in names
     ]
     corrections = getmatrix(mix_eos_db, names)

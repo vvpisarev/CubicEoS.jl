@@ -55,7 +55,7 @@ function helmholtz(nmol, vol)
     return f
 end
 
-println("Helmholtz energy: ", helmholtz(nmol))
+println("Helmholtz energy: ", helmholtz(nmol, 2.0))
 
 nmol1 = nmol .+ (1, 0)
 println("Approx. chemical potential: ", helmholtz(nmol1, 2.0) - helmholtz(nmol, 2.0))

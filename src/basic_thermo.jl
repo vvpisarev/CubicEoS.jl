@@ -99,9 +99,9 @@ function eos_parameters(
     mixture::BrusilovskyEoSMixture{T},
     nmol::AbstractVector{<:Real},
     RT::Real;
-    buffers...
+    kwargs...
 ) where {T}
-
+    buffers = kwargs.data
     nc = length(nmol)
     aij = haskey(buffers, :aij) ? buffers[:aij] : Matrix{T}(undef, nc, nc)
     ai = haskey(buffers, :ai) ? buffers[:ai] : Vector{T}(undef, nc)
@@ -140,10 +140,10 @@ function pressure(
     nmol::AbstractVector{<:Real},
     volume::Real,
     RT::Real;
-    buffers...
+    kwargs...
 )
 
-    Am, Bm, Cm, Dm = eos_parameters(mixture, nmol, RT; buffers...)
+    Am, Bm, Cm, Dm = eos_parameters(mixture, nmol, RT; kwargs...)
     return sum(nmol) * RT / (volume - Bm) - Am/((volume + Cm) * (volume + Dm))
 end
 
@@ -166,13 +166,14 @@ function compressibility(
     χ::AbstractVector{<:Real},
     P::Real,
     RT::Real,
-    phase::AbstractChar='g'
+    phase::AbstractChar='g';
+    kwargs...
 )
 
     phase in ('g', 'l') || throw(DomainError(repr(phase), "Phase must be 'g' or 'l'"))
 
     ntotal = sum(χ)
-    am, bm, cm, dm = eos_parameters(mix, χ, RT)
+    am, bm, cm, dm = eos_parameters(mix, χ, RT; kwargs...)
     prt = P / (RT * ntotal)
     am *= prt / (RT * ntotal)
     bm *= prt

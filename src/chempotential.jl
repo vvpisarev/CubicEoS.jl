@@ -32,11 +32,10 @@ function log_activity(
 
     buffers = kwargs.data
     aij = haskey(buffers, :aij) ? buffers[:aij] : Matrix{T}(undef, nc, nc)
-    ai = haskey(buffers, :ai) ? buffers[:ai] : Vector{T}(undef, nc)
     log_a = haskey(buffers, :log_a) ? buffers[:log_a] : Vector{T}(undef, nc)
 
     # коэффициенты вычислены для состава в [моль]
-    A, B, C, D, aij = eos_parameters(mix, nmol, RT; aij = aij, ai = ai)
+    A, B, C, D, aij = eos_parameters(mix, nmol, RT; aij = aij, ai = log_a)
 
     VmB = volume - B
     VpC = volume + C
@@ -75,12 +74,11 @@ function log_activity_wj(
     nc = ncomponents(mix)
     buffers = kwargs.data
     jacobian = haskey(buffers, :jacobian) ? buffers[:jacobian] : Matrix{T}(undef, nc, nc)
-    aij = haskey(buffers, :aij) ? buffers[:aij] : Matrix{T}(undef, nc, nc)
     log_a = haskey(buffers, :log_a) ? buffers[:log_a] : Vector{T}(undef, nc)
     aux1 = haskey(buffers, :aux1) ? buffers[:aux1] : Vector{T}(undef, nc)
     aux2 = haskey(buffers, :aux2) ? buffers[:aux2] : Vector{T}(undef, nc)
 
-    A, B, C, D, aij = eos_parameters(mix, nmol, RT; aij = aij, ai = aux1)
+    A, B, C, D, aij = eos_parameters(mix, nmol, RT; aij = jacobian, ai = aux1)
 
     V = volume
     ntotal = sum(nmol)
@@ -95,25 +93,28 @@ function log_activity_wj(
     log_VpCbyVpD = log(VpC / VpD)
     log2 = log1p(CmD / (V + D)) / (RT * CmD)
 
-    @inbounds map!(aux1, 1:nc) do i
-        mix[i].b / VmB
-    end
-    log_a .= aux1 .* ntotal .- log_VmBbyV
-    jacobian .= aux1 .+ aux1' .+ ntotal .* aux1 .* aux1'
+    aij = jacobian
     mul!(aux1, aij, nmol)
     @inbounds map!(aux2, 1:nc) do i
         mix[i].c - mix[i].d
     end
-    log_a .-= AbyRTCmD .* log_VpCbyVpD .* (2 .* aux1 ./ A .- aux2 ./ CmD)
-    jacobian .-= (2 * log2) .* ((A / CmD^2) .* aux2 .* aux2' .+ aij)
+    log_a .= (-AbyRTCmD * log_VpCbyVpD) .* (2 .* aux1 ./ A .- aux2 ./ CmD)
+    jacobian .= (-2 * log2) .* ((A / CmD^2) .* aux2 .* aux2' .+ aij)
     jacobian .+= (2 * log2 / CmD) .* (aux2 .* aux1' .+ aux1 .* aux2')
 
-    aux1 .= 2 .* aux1 ./ (RT * CmD) .- aux2 .* (A / (RT * CmD^2))
+    aux1 .= aux1 .* (2 / (RT * CmD)) .- aux2 .* (A / (RT * CmD^2))
     @inbounds map!(aux2, 1:nc) do i
         mix[i].c / VpC - mix[i].d / VpD
     end
     log_a .-= AbyRTCmD .* aux2
     jacobian .-= aux1 .* aux2'.+ aux2 .* aux1'
+
+    @inbounds map!(aux1, 1:nc) do i
+        mix[i].b / VmB
+    end
+    log_a .+= aux1 .* ntotal .- log_VmBbyV
+    jacobian .+= aux1 .+ aux1' .+ ntotal .* aux1 .* aux1'
+
     @inbounds map!(aux1, 1:nc) do i
         mix[i].d / VpD
     end

@@ -68,25 +68,28 @@ function vt_stability(
     mix::BrusilovskyEoSMixture,
     nmol::AbstractVector,
     volume,
-    RT
+    RT;
+    loga_parent::AbstractVector,
+    loga_test::AbstractVector,
+    jacobian::AbstractMatrix,
+    aux1::AbstractVector,
+    aux2::AbstractVector,
+    bi::AbstractVector,
+    p_sat::AbstractVector
 )
 
     nc = length(mix)
-    jacobian_test = zeros(nc, nc)
-    aij = zeros(nc, nc)
 
-    loga_parent = similar(nmol)
-    loga_test = similar(nmol)
-
-    aux1, aux2 = similar(nmol), similar(nmol)
-
+    aij = jacobian
     log_activity(mix, nmol, volume, RT; log_a = loga_parent, ai = aux1, aij = aij)
     loga_parent .+= log.(nmol ./ volume)
     p_parent = pressure(mix, nmol, volume, RT; aij = aij, ai = aux1)
 
     thresh = -1e-5
 
-    b = [comp.b for comp in components(mix)]
+    comp = components(mix)
+    map!(subst -> subst.b, bi, comp)
+    map!(subst -> wilson_saturation_pressure(subst, RT), p_sat, comp)
     function stabilitytest!(nmol_test, grad)
         log_activity(mix, nmol_test, 1, RT; log_a = grad, ai = aux1, aij = aij)
         p_test = pressure(mix, nmol_test, 1, RT; aij = aij, ai = aux1)
@@ -104,7 +107,7 @@ function vt_stability(
                 αm = α
             end
         end
-        α = (1 - nmol_test' * b) / (d' * b)  # Σ(xᵢ+αdᵢ)bᵢ < 1, covolume constrain
+        α = (1 - nmol_test' * bi) / (d' * bi)  # Σ(xᵢ+αdᵢ)bᵢ < 1, covolume constrain
         if 0 < α < αm
             αm = α
         end
@@ -113,8 +116,6 @@ function vt_stability(
 
     optmethod = DescentMethods.CholBFGS(nmol)
 
-    comp = mix.components
-    p_sat = [wilson_saturation_pressure(comp[i], RT) for i in 1:nc]
     # Initial - gas
     p_init = dot(p_sat, nmol) / sum(nmol)
     nmol_test = nmol .* p_sat ./ p_init
@@ -123,21 +124,20 @@ function vt_stability(
     z_gg = compressibility(mix, nmol_test, p_init, RT, 'g')
     ntest_gg = nmol_test .* (p_init / (z_gg * RT * sum(nmol_test)))
 
-    _, jacobian_test = log_activity_wj(
+    _, jacobian = log_activity_wj(
         mix,
         ntest_gg,
         1,
         RT;
         log_a = loga_test,
-        jacobian = jacobian_test,
-        aij = aij,
+        jacobian = jacobian,
         aux1 = aux1,
         aux2 = aux2
     )
     for i in 1:nc
-        jacobian_test[i,i] += 1 / ntest_gg[i]
+        jacobian[i,i] += 1 / ntest_gg[i]
     end
-    DescentMethods.reset!(optmethod, ntest_gg, jacobian_test)
+    DescentMethods.reset!(optmethod, ntest_gg, jacobian)
 
     D_gg = vt_stability_optim_try!(optmethod, ntest_gg, loga_test, stabilitytest!, stability_step)
 
@@ -149,21 +149,20 @@ function vt_stability(
     z_gl = compressibility(mix, nmol_test, p_init, RT, 'l')
     ntest_gl = nmol_test .* (p_init / (z_gl * RT * sum(nmol_test)))
 
-    _, jacobian_test = log_activity_wj(
+    _, jacobian = log_activity_wj(
         mix,
         ntest_gl,
         1,
         RT;
         log_a = loga_test,
-        jacobian = jacobian_test,
-        aij = aij,
+        jacobian = jacobian,
         aux1 = aux1,
         aux2 = aux2
     )
     for i in 1:nc
-        jacobian_test[i,i] += 1 / ntest_gl[i]
+        jacobian[i,i] += 1 / ntest_gl[i]
     end
-    DescentMethods.reset!(optmethod, ntest_gl, jacobian_test)
+    DescentMethods.reset!(optmethod, ntest_gl, jacobian)
 
     D_gl = vt_stability_optim_try!(optmethod, ntest_gl, loga_test, stabilitytest!, stability_step)
 
@@ -180,21 +179,20 @@ function vt_stability(
     z_lg = compressibility(mix, nmol_test, p_init, RT, 'g')
     ntest_lg = nmol_test .* (p_init / (z_lg * RT * sum(nmol_test)))
 
-    _, jacobian_test = log_activity_wj(
+    _, jacobian = log_activity_wj(
         mix,
         ntest_lg,
         1,
         RT;
         log_a = loga_test,
-        jacobian = jacobian_test,
-        aij = aij,
+        jacobian = jacobian,
         aux1 = aux1,
         aux2 = aux2
     )
     for i in 1:nc
-        jacobian_test[i,i] += 1 / ntest_lg[i]
+        jacobian[i,i] += 1 / ntest_lg[i]
     end
-    DescentMethods.reset!(optmethod, ntest_lg, jacobian_test)
+    DescentMethods.reset!(optmethod, ntest_lg, jacobian)
 
     D_lg = vt_stability_optim_try!(optmethod, ntest_lg, loga_test, stabilitytest!, stability_step)
 
@@ -206,21 +204,20 @@ function vt_stability(
     z_ll = compressibility(mix, nmol_test, p_init, RT, 'l')
     ntest_ll = nmol_test .* (p_init / (z_ll * RT * sum(nmol_test)))
 
-    _, jacobian_test = log_activity_wj(
+    _, jacobian = log_activity_wj(
         mix,
         ntest_ll,
         1,
         RT;
         log_a = loga_test,
-        jacobian = jacobian_test,
-        aij = aij,
+        jacobian = jacobian,
         aux1 = aux1,
         aux2 = aux2
     )
     for i in 1:nc
-        jacobian_test[i,i] += 1 / ntest_ll[i]
+        jacobian[i,i] += 1 / ntest_ll[i]
     end
-    DescentMethods.reset!(optmethod, ntest_ll, jacobian_test)
+    DescentMethods.reset!(optmethod, ntest_ll, jacobian)
 
     D_ll = vt_stability_optim_try!(optmethod, ntest_ll, loga_test, stabilitytest!, stability_step)
 

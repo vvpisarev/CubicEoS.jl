@@ -36,22 +36,20 @@ c1c4mix = BrusilovskyEoSMixture(
 
 nmol = [500., 500]
 
-_log_a = zeros(2)
-_ai = zeros(2)
-_aij = zeros(2, 2)
+thermo_buf = CubicEoS.BrusilovskyThermoBuffer(c1c4mix)
 
-p = pressure(c1c4mix, nmol, 2.0, 8.314 * 300; ai = _ai, aij = _aij)
+p = pressure(c1c4mix, nmol, 2.0, 8.314 * 300; buf = thermo_buf)
 println("Pressure: ", p, " Pa")
 
 function log_a(mix, nmol, vol, RT)
-    return CubicEoS.log_activity(mix, nmol, vol, RT; ai = _ai, aij = _aij)
+    return CubicEoS.log_c_activity(mix, nmol, vol, RT; buf = thermo_buf)
 end
 
 chempot(nmol) = 8.314 .* 300 .* (log.(nmol) .+ log_a(c1c4mix, nmol, 2.0, 8.314*300))
 
 function helmholtz(nmol, vol)
     f = sum(nmol .* chempot(nmol))
-    f -= vol * pressure(c1c4mix, nmol, vol, 8.314 * 300; ai = _ai, aij = _aij)
+    f -= vol * pressure(c1c4mix, nmol, vol, 8.314 * 300; buf = thermo_buf)
     return f
 end
 
@@ -64,7 +62,7 @@ println("Chemical potential: ", chempot(nmol))
 
 (log_a(c1c4mix, nmol1, 2.0, 8.314*300) - log_a(c1c4mix, nmol, 2.0, 8.314*300)) |> println
 
-CubicEoS.log_activity_wj(
+CubicEoS.log_c_activity_wj(
     c1c4mix,
     nmol,
     2.0,

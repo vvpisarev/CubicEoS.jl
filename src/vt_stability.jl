@@ -5,16 +5,55 @@ export vt_stability
 
 using DescentMethods
 
-struct StabilityBuffer{M, P}
+struct VTStabilityBuffer{M, B}
     mixture_eos::M
-    parent_phase::P
-    test_phase::P
+    solver_buffer::B
 end
 
-function StabilityBuffer(mix::BrusilovskyEoSMixture{T}) where {T}
-    parent_phase = ()
-    test_phase = ()
-    return StabilityBuffer(mix, parent_phase, test_phase)
+function VTStabilityBuffer(mix::BrusilovskyEoSMixture)
+    thermo_buf = BrusilovskyThermoBuffer(mix)
+    loga_parent = similar(thermo_buf.vec1)
+    loga_test = similar(loga_parent)
+    p_sat = similar(loga_parent)
+    bi = similar(loga_parent)
+    nmol_test = similar(loga_parent)
+    jacobian = similar(thermo_buf.matr)
+
+    solver_buffer = (
+        ;
+        loga_parent = loga_parent,
+        loga_test = loga_test,
+        p_sat = p_sat,
+        bi = bi,
+        nmol_test = nmol_test,
+        jacobian = jacobian,
+        thermo_buf = thermo_buf
+    )
+    return VTStabilityBuffer(mix, solver_buffer)
+end
+
+function VTStabilityBuffer(
+    mix::BrusilovskyEoSMixture{T},
+    thermo_buf::BrusilovskyThermoBuffer{T}
+) where {T}
+    loga_parent = similar(thermo_buf.vec1)
+    loga_test = similar(log_a_parent)
+    p_sat = similar(log_a_parent)
+    bi = similar(log_a_parent)
+    nmol_test = similar(log_a_parent)
+    jacobian = similar(thermo_buf.matr)
+
+    solver_buffer = (
+        ;
+        loga_parent = loga_parent,
+        loga_test = loga_test,
+        p_sat = p_sat,
+        bi = bi,
+        nmol_test = nmol_test,
+        jacobian = jacobian,
+        thermo_buf = thermo_buf
+    )
+    return VTStabilityBuffer(mix, solver_buffer)
 end
 
 """
@@ -69,25 +108,24 @@ function vt_stability(
     nmol::AbstractVector,
     volume,
     RT;
-    kwargs...
+    vtstab_buf::VTStabilityBuffer = VTStabilityBuffer(mix)
 ) where {T}
 
     nc = length(mix)
-    buffers = kwargs.data
 
-    loga_parent = haskey(buffers, :loga_parent) ? buffers[:loga_parent] : Vector{T}(undef, nc)
-    loga_test = haskey(buffers, :loga_test) ? buffers[:loga_test] : Vector{T}(undef, nc)
-    jacobian = haskey(buffers, :jacobian) ? buffers[:jacobian] : Matrix{T}(undef, nc, nc)
-    aux1 = haskey(buffers, :aux1) ? buffers[:aux1] : Vector{T}(undef, nc)
-    aux2 = haskey(buffers, :aux2) ? buffers[:aux2] : Vector{T}(undef, nc)
-    bi = haskey(buffers, :bi) ? buffers[:bi] : Vector{T}(undef, nc)
-    p_sat = haskey(buffers, :p_sat) ? buffers[:p_sat] : Vector{T}(undef, nc)
-    nmol_test = haskey(buffers, :nmol_test) ? buffers[:nmol_test] : Vector{T}(undef, nc)
+    buffers = vtstab_buf.solver_buffer
 
-    aij = jacobian
-    log_activity(mix, nmol, volume, RT; log_a = loga_parent, ai = aux1, aij = aij)
+    loga_parent = buffers[:loga_parent]
+    loga_test = buffers[:loga_test]
+    jacobian = buffers[:jacobian]
+    thermo_buf = buffers.thermo_buf
+    bi = buffers[:bi]
+    p_sat = buffers[:p_sat]
+    nmol_test = buffers[:nmol_test]
+
+    log_c_activity!(loga_parent, mix, nmol, volume, RT; buf = thermo_buf)
     loga_parent .+= log.(nmol ./ volume)
-    p_parent = pressure(mix, nmol, volume, RT; aij = aij, ai = aux1)
+    p_parent = pressure(mix, nmol, volume, RT; buf = thermo_buf)
 
     thresh = -1e-5
 
@@ -95,8 +133,8 @@ function vt_stability(
     map!(subst -> subst.b, bi, comp)
     map!(subst -> wilson_saturation_pressure(subst, RT), p_sat, comp)
     function stabilitytest!(nmol_test, grad)
-        log_activity(mix, nmol_test, 1, RT; log_a = grad, ai = aux1, aij = aij)
-        p_test = pressure(mix, nmol_test, 1, RT; aij = aij, ai = aux1)
+        log_c_activity!(grad, mix, nmol_test, 1, RT; buf = thermo_buf)
+        p_test = pressure(mix, nmol_test, 1, RT; buf = thermo_buf)
         grad .+= log.(nmol_test)
         grad .-= loga_parent
         D = dot(grad, nmol_test) - (p_test - p_parent) / RT
@@ -119,15 +157,14 @@ function vt_stability(
     end
 
     function D_min(nmol_test, optmethod)
-        _, jacobian = log_activity_wj(
+        _, jacobian = log_c_activity_wj!(
+            loga_test,
+            jacobian,
             mix,
             nmol_test,
             1,
             RT;
-            log_a = loga_test,
-            jacobian = jacobian,
-            aux1 = aux1,
-            aux2 = aux2
+            buf = thermo_buf
         )
         for i in 1:nc
             jacobian[i,i] += 1 / nmol_test[i]

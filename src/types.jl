@@ -9,7 +9,7 @@ const NothingOrT{T} = Union{Nothing,T}
 struct BrusilovskyEoSComponent{T<:Number} <: AbstractEoSComponent
     # meta information
     name::String
-    
+
     # physical parameters
     Pc::T  # critical pressure
     acentric_factor::T
@@ -23,7 +23,7 @@ struct BrusilovskyEoSComponent{T<:Number} <: AbstractEoSComponent
     c::T      # explicit coefficient of the eos c
     d::T      # explicit coefficient of the eos d
     Psi::T    # primary coefficient of the eos - \Psi
-    
+
     function BrusilovskyEoSComponent{T}(
         ;
         name::AbstractString="No Name",
@@ -91,4 +91,29 @@ struct BrusilovskyEoSMixture{T} <: AbstractEoSMixture
     end
 end
 
-@inline Base.@propagate_inbounds Base.getindex(mix::BrusilovskyEoSMixture, i::Integer) = mix.components[i]
+@inline Base.@propagate_inbounds function Base.getindex(
+    mix::BrusilovskyEoSMixture,
+    i::Integer
+)
+    return mix.components[i]
+end
+
+struct BrusilovskyThermoBuffer{T}
+    matr::Matrix{T}
+    vec1::Vector{T}
+    vec2::Vector{T}
+end
+
+function BrusilovskyThermoBuffer{T}(n::Integer) where {T}
+    matr = Matrix{T}(undef, n, n)
+    vec1 = similar(matr, (n,))
+    vec2 = similar(vec1)
+    return BrusilovskyThermoBuffer{T}(matr, vec1, vec2)
+end
+
+BrusilovskyThermoBuffer(n::Integer) = BrusilovskyThermoBuffer{Float64}(n)
+
+function BrusilovskyThermoBuffer(mix::BrusilovskyEoSMixture{T}) where {T}
+    nc = ncomponents(mix)
+    return BrusilovskyThermoBuffer{T}(nc)
+end

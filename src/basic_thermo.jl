@@ -99,12 +99,45 @@ function eos_parameters(
     mixture::BrusilovskyEoSMixture{T},
     nmol::AbstractVector{<:Real},
     RT::Real;
-    kwargs...
+    buf = NamedTuple()
 ) where {T}
-    buffers = kwargs.data
+    return __eos_parameters_impl__(mixture, nmol, RT, buf)
+end
+
+function __eos_parameters_impl__(
+    mixture::BrusilovskyEoSMixture{T},
+    nmol::AbstractVector{<:Real},
+    RT::Real,
+    buf::BrusilovskyThermoBuffer{T}
+) where {T}
+    aij = buf.matr
+    ai = buf.vec1
+    map!(comp -> a_coef(comp, RT), ai, mixture.components)
+
+    Bm = Cm = Dm = zero(T)
+    @inbounds for i in eachindex(nmol, mixture.components)
+        Bm += nmol[i] * mixture.components[i].b
+        Cm += nmol[i] * mixture.components[i].c
+        Dm += nmol[i] * mixture.components[i].d
+    end
+
+    temp = RT / GAS_CONSTANT_SI - 273.16
+    eij, gij, hij = mixture.eij, mixture.gij, mixture.hij
+    aij .= (one(T) .- (eij .+ temp .* (gij .+ temp .* hij))) .* sqrt.(ai .* ai')
+    # WARNING: at least Julia 1.4 is required for 3-argument `dot`
+    Am = dot(nmol, aij, nmol)
+    return Am, Bm, Cm, Dm, aij
+end
+
+function __eos_parameters_impl__(
+    mixture::BrusilovskyEoSMixture{T},
+    nmol::AbstractVector{<:Real},
+    RT::Real,
+    buf::Union{NamedTuple, AbstractDict}
+) where {T}
     nc = length(nmol)
-    aij = haskey(buffers, :aij) ? buffers[:aij] : Matrix{T}(undef, nc, nc)
-    ai = haskey(buffers, :ai) ? buffers[:ai] : Vector{T}(undef, nc)
+    aij = haskey(buf, :aij) ? buf[:aij] : Matrix{T}(undef, nc, nc)
+    ai = haskey(buf, :ai) ? buf[:ai] : Vector{T}(undef, nc)
     map!(comp -> a_coef(comp, RT), ai, mixture.components)
 
     Bm = Cm = Dm = zero(T)
@@ -137,13 +170,12 @@ Returns pressure (Pa) of `mixture` at given
 """
 function pressure(
     mixture::BrusilovskyEoSMixture,
-    nmol::AbstractVector{<:Real},
-    volume::Real,
-    RT::Real;
-    kwargs...
+    nmol::AbstractVector,
+    volume,
+    RT;
+    buf = NamedTuple()
 )
-
-    Am, Bm, Cm, Dm = eos_parameters(mixture, nmol, RT; kwargs...)
+    Am, Bm, Cm, Dm = eos_parameters(mixture, nmol, RT; buf = buf)
     return sum(nmol) * RT / (volume - Bm) - Am/((volume + Cm) * (volume + Dm))
 end
 
@@ -152,7 +184,7 @@ end
 
 Computes compressibility (z-factor) of `mixture` in `phase` at given
 
-- composition in molar parts `χ` (mol)
+- composition in moles `χ` (mol)
 - pressure `P` (Pa)
 - thermal energy `RT` (J mol⁻¹)
 
@@ -163,17 +195,17 @@ Computes compressibility (z-factor) of `mixture` in `phase` at given
 """
 function compressibility(
     mix::BrusilovskyEoSMixture,
-    χ::AbstractVector{<:Real},
-    P::Real,
-    RT::Real,
+    χ::AbstractVector,
+    P,
+    RT,
     phase::AbstractChar='g';
-    kwargs...
+    buf = NamedTuple()
 )
 
     phase in ('g', 'l') || throw(DomainError(repr(phase), "Phase must be 'g' or 'l'"))
 
     ntotal = sum(χ)
-    am, bm, cm, dm = eos_parameters(mix, χ, RT; kwargs...)
+    am, bm, cm, dm = eos_parameters(mix, χ, RT; buf = buf)
     prt = P / (RT * ntotal)
     am *= prt / (RT * ntotal)
     bm *= prt

@@ -3,19 +3,30 @@ Functions to compute chemical potential-related characteristics
 =#
 
 """
-    log_activity!([log_a_, ai_, aij_,] mixture, nmol, volume, RT)
+    log_activity(mixture, nmol, volume, RT; kwargs...)
 
-Returns vector of ln(c_a) - logarithm of activity coefficient
-for components of `mixture` at given
+Return vector of ln(c_a) - logarithm of activity coefficient
+for components of `mixture` at given `nmol`, `volume`, `RT`.
+If buffers are provided as keyword arguments, their contents
+are modified during the intermediate calculations.
 
-- amount of each component `N` (mol)
-- volume `V` (m³)
-- thermal energy `RT`
+# Arguments
+
+- `mix`: mixture
+- `nmol::AbstractVector`: amount of each component (mol)
+- `volume`: volume of the mixture (m³)
+- `RT`: thermal energy (J/mol)
+
+# Returns
+
+- `AbstractVector`: the logarithms of activity coefficients
+of the components at given number of moles, volume and temperature
 
 # Keyword arguments
 
-- `log_a::AbstractVector` - vector for storing answer. Specify it to avoid allocation
-- `ai::AbstractVector`, `aij::AbstractMatrix` - buffers for intermediate calculations
+- `log_a::AbstractVector`: vector for storing the answer. Specify it to avoid allocation
+- `ai::AbstractVector`: buffer for intermediate calculations
+- `aij::AbstractMatrix`: buffers for intermediate calculations
 
 See (Jirí Mikyska, Abbas Firoozabadi // 10.1002/aic.12387)
 """
@@ -64,6 +75,34 @@ function log_activity(
     return log_a
 end
 
+"""
+    log_activity_wj(mixture, nmol, volume, RT; kwargs...)
+
+Return vector of ln(c_a) - logarithm of activity coefficient
+for components of `mixture` at given `nmol`, `volume`, `RT` -
+and the jacobian ∂ln(c_a[i]) / ∂n[j].
+If buffers are provided as keyword arguments, their contents
+are modified during the intermediate calculations.
+
+# Arguments
+
+- `mix`: mixture
+- `nmol::AbstractVector`: amount of each component (mol)
+- `volume`: volume of the mixture (m³)
+- `RT`: thermal energy (J/mol)
+
+# Returns
+
+- `AbstractVector`: the logarithms of activity coefficients
+of the components at given number of moles, volume and temperature
+
+# Keyword arguments
+
+- `log_a::AbstractVector`: vector for storing the answer. Specify it to avoid allocation
+- `jacobian::AbstractMatrix`: vector for storing the jacobian. Specify it to avoid allocation
+- `aux1::AbstractVector`: buffer for intermediate calculations
+- `aux2::AbstractVector`: buffer for intermediate calculations
+"""
 function log_activity_wj(
     mix::BrusilovskyEoSMixture{T},
     nmol::AbstractVector,

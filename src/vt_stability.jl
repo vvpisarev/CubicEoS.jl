@@ -1,13 +1,27 @@
 #=
 VT stability algorithm
 =#
-export vt_stability
+export vt_stability, vt_stability_buffer
 
 using DescentMethods
 
-struct VTStabilityBuffer{M, B}
-    mixture_eos::M
+struct VTStabilityBuffer{B}
     solver_buffer::B
+end
+
+@inline function Base.getproperty(b::VTStabilityBuffer, p::Symbol)
+    sol_buf = getfield(b, :solver_buffer)
+    return getproperty(sol_buf, p)
+end
+
+@inline function Base.getindex(b::VTStabilityBuffer, p::Symbol)
+    sol_buf = getfield(b, :solver_buffer)
+    return getproperty(sol_buf, p)
+end
+
+@inline function Base.propertynames(b::VTStabilityBuffer)
+    sol_buf = getfield(b, :solver_buffer)
+    return propertynames(sol_buf)
 end
 
 function VTStabilityBuffer(mix::BrusilovskyEoSMixture)
@@ -29,13 +43,12 @@ function VTStabilityBuffer(mix::BrusilovskyEoSMixture)
         jacobian = jacobian,
         thermo_buf = thermo_buf
     )
-    return VTStabilityBuffer(mix, solver_buffer)
+    return VTStabilityBuffer(solver_buffer)
 end
 
 function VTStabilityBuffer(
-    mix::BrusilovskyEoSMixture{T},
-    thermo_buf::BrusilovskyThermoBuffer{T}
-) where {T}
+    thermo_buf::BrusilovskyThermoBuffer
+)
     loga_parent = similar(thermo_buf.vec1)
     loga_test = similar(log_a_parent)
     p_sat = similar(log_a_parent)
@@ -53,8 +66,10 @@ function VTStabilityBuffer(
         jacobian = jacobian,
         thermo_buf = thermo_buf
     )
-    return VTStabilityBuffer(mix, solver_buffer)
+    return VTStabilityBuffer(solver_buffer)
 end
+
+vt_stability_buffer(x) = VTStabilityBuffer(x)
 
 """
 Оптимизационная процедура для алгоритма проверки стабильности.
@@ -113,15 +128,13 @@ function vt_stability(
 
     nc = length(mix)
 
-    buffers = vtstab_buf.solver_buffer
-
-    loga_parent = buffers[:loga_parent]
-    loga_test = buffers[:loga_test]
-    jacobian = buffers[:jacobian]
-    thermo_buf = buffers.thermo_buf
-    bi = buffers[:bi]
-    p_sat = buffers[:p_sat]
-    nmol_test = buffers[:nmol_test]
+    loga_parent = vtstab_buf.loga_parent
+    loga_test = vtstab_buf.loga_test
+    jacobian = vtstab_buf.jacobian
+    thermo_buf = vtstab_buf.thermo_buf
+    bi = vtstab_buf.bi
+    p_sat = vtstab_buf.p_sat
+    nmol_test = vtstab_buf.nmol_test
 
     log_c_activity!(loga_parent, mix, nmol, volume, RT; buf = thermo_buf)
     loga_parent .+= log.(nmol ./ volume)

@@ -1,4 +1,4 @@
-export BrusilovskyEoSComponent, BrusilovskyEoSMixture
+export BrusilovskyEoSComponent, BrusilovskyEoSMixture, thermo_buffer
 
 abstract type AbstractEoSComponent end
 
@@ -117,3 +117,5 @@ function BrusilovskyThermoBuffer(mix::BrusilovskyEoSMixture{T}) where {T}
     nc = ncomponents(mix)
     return BrusilovskyThermoBuffer{T}(nc)
 end
+
+thermo_buffer(mix::BrusilovskyEoSMixture) = BrusilovskyThermoBuffer(mix)

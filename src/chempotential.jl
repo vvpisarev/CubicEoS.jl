@@ -2,8 +2,6 @@
 Functions to compute chemical potential-related characteristics
 =#
 
-export log_c_activity!, log_c_activity, log_c_activity_wj!, log_c_activity_wj
-
 """
     log_c_activity(mixture, nmol, volume, RT; buf = (;))
 
@@ -116,7 +114,7 @@ function log_c_activity!(
 end
 
 """
-    log_activity_wj(mixture, nmol, volume, RT; buf = (;))
+    log_activity_wj(mixture, nmol, volume, RT[; buf])
 
 Return vector of ln(c_a) - logarithm of activity coefficient
 for components of `mixture` at given `nmol`, `volume`, `RT` -
@@ -133,12 +131,13 @@ are modified during the intermediate calculations.
 
 # Returns
 
-- `AbstractVector`: the logarithms of activity coefficients
-of the components at given number of moles, volume and temperature
+- `Tuple{AbstractVector,AbstractMatrix}`: the logarithms of activity coefficients
+of the components at given number of moles, volume and temperature, and the jacobian
+matrix ∂ln(c_a[i]) / ∂n[j].
 
 # Keyword arguments
 
-- `buf::Union{BrusilovskyThermoBuffer, NamedTuple, AbstractDict}`: buffers for intermediate
+- `buf::BrusilovskyThermoBuffer`: buffers for intermediate
 calculations
 """
 function log_c_activity_wj(
@@ -154,6 +153,36 @@ function log_c_activity_wj(
     return log_c_activity_wj!(log_ca, jacobian, mix, nmol, volume, RT; buf = buf)
 end
 
+"""
+    log_activity_wj!(log_ca, jacobian, mixture, nmol, volume, RT[; buf])
+
+Return vector of ln(c_a) - logarithm of activity coefficient
+for components of `mixture` at given `nmol`, `volume`, `RT` -
+and the jacobian ∂ln(c_a[i]) / ∂n[j]. The first two arguments get overwritten
+by the result.
+If buffers are provided as keyword arguments, their contents
+are modified during the intermediate calculations.
+
+# Arguments
+
+- `log_ca::AbstractVector`: a vector to store the activity coefficients
+- `jacobian::AbstractMatrix`: a matrix to store ∂ln(c_a[i]) / ∂n[j]
+- `mix`: mixture
+- `nmol::AbstractVector`: amount of each component (mol)
+- `volume`: volume of the mixture (m³)
+- `RT`: thermal energy (J/mol)
+
+# Returns
+
+- `Tuple{AbstractVector,AbstractMatrix}`: the logarithms of activity coefficients
+of the components at given number of moles, volume and temperature, and the jacobian
+matrix ∂ln(c_a[i]) / ∂n[j]. The values are aliases for the first two arguments.
+
+# Keyword arguments
+
+- `buf::BrusilovskyThermoBuffer`: buffers for intermediate
+calculations
+"""
 function log_c_activity_wj!(
     log_ca::AbstractVector,
     jacobian::AbstractMatrix,

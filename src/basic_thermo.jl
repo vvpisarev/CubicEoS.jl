@@ -3,8 +3,6 @@ Basic thermodynamic properties
 =#
 using LinearAlgebra
 
-export ncomponents, pressure, wilson_saturation_pressure, compressibility
-
 include("solvecubic.jl")
 
 @inline ncomponents(mix::BrusilovskyEoSMixture) = length(mix.components)

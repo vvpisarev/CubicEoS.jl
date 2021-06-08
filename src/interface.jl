@@ -1,4 +1,3 @@
-export molar_mass, carbon_number, name, describe, load, components
 """
     molar_mass(c::AbstractEoSComponent)
 

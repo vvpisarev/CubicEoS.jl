@@ -1,5 +1,3 @@
-export BrusilovskyEoSComponent, BrusilovskyEoSMixture, thermo_buffer
-
 abstract type AbstractEoSComponent end
 
 abstract type AbstractEoSMixture end

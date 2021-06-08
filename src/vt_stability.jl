@@ -1,7 +1,6 @@
 #=
 VT stability algorithm
 =#
-export vt_stability, vt_stability_buffer
 
 using DescentMethods
 

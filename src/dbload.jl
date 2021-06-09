@@ -116,7 +116,7 @@ function __load_brusilovsky_comp__(
 end
 
 """
-    load(BrusilovskyEoSComponent; name::AbstractString[, component_dbs])
+    load(BrusilovskyEoSMixture; name::AbstractString[, component_dbs])
 
 Return `BrusilovskyEoSMixture` by loading parameters for individual substances named `names`
 from `component_dbs` and their interaction parameters from `mix_eos_db`.
@@ -140,7 +140,7 @@ function load(
     component_dbs = (Data.martinez(), Data.brusilovsky_comp()),
     mix_eos_db::MixtureDatabase = Data.brusilovsky_mix()
 )
-    
+
     components = [
         load(
             BrusilovskyEoSComponent;

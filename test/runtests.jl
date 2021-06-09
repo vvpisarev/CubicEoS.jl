@@ -15,4 +15,5 @@ end
 
 @testset "CubicEoS.jl" begin
     include("dbload.jl")
+    include("basic_thermo.jl")
 end

@@ -68,7 +68,6 @@ function __load_brusilovsky_comp__(
     critical_omega::AbstractString,
     psi::AbstractString
 )
-
     Omegac  = 0.75001                       # Table (4.14)
     Zc      = 0.3357 - 0.0294 * acentric    # 4.203
     if acentric < 0.4489
@@ -140,7 +139,6 @@ function load(
     component_dbs = (Data.martinez(), Data.brusilovsky_comp()),
     mix_eos_db::MixtureDatabase = Data.brusilovsky_mix()
 )
-
     components = [
         load(
             BrusilovskyEoSComponent;

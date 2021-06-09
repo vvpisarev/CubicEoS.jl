@@ -104,9 +104,7 @@ composition `nmol` and thermal energy `RT`. Allocations may be avoided by passin
 - `RT::Real`: Thermal energy (J mol⁻¹)
 
 # Keywords
-- `buf::Union{BrusilovskyThermoBuffer,NamedTuple,AbstractDict}`: Buffer for intermediate
-    calculations. In case of `NamedTuple` and `AbstractDict` `buf` should contain `buf[:ai]`
-    `NC = ncomponents(mixture)` vector and `buf[:aij]` NCxNC matrix.
+- `buf`: see ?pressure(mixture)
 """
 function eos_parameters(
     mixture::BrusilovskyEoSMixture{T},
@@ -170,26 +168,29 @@ function __eos_parameters_impl__(
 end
 
 """
-    pressure(mixture, χ, υ, RT[, buffer])
+    pressure(mixture, nmol, volume, RT[, buf])
 
 Returns pressure (Pa) of `mixture` at given
 
-- composition in molar parts `χ` (dimless)
-- molar volume `υ` (m³ mol⁻¹)
-- thermal energy `RT` (J mol⁻¹)
+- `nmol::AbstractVector`: composition (molar parts) or number of moles (mol)
+- `volume::Real`: molar volume (m³ mol⁻¹) or volume (m³)
+- `RT::Real`: thermal energy (J mol⁻¹)
 
-# Keyword arguments
+Allocations may be avoided by passing `buf`.
 
-- `aij::AbstractMatrix`, `ai::AbstractVector` - buffers for intermediate calculations
+# Keywords
+- `buf::Union{BrusilovskyThermoBuffer,NamedTuple,AbstractDict}`: Buffer for intermediate
+    calculations. In case of `NamedTuple` and `AbstractDict` `buf` should contain `buf[:ai]`
+    `NC = ncomponents(mixture)` vector and `buf[:aij]` NCxNC matrix.
 """
 function pressure(
     mixture::BrusilovskyEoSMixture,
     nmol::AbstractVector,
-    volume,
-    RT;
-    buf = NamedTuple()
+    volume::Real,
+    RT::Real;
+    buf = NamedTuple(),
 )
-    Am, Bm, Cm, Dm = eos_parameters(mixture, nmol, RT; buf = buf)
+    Am, Bm, Cm, Dm, _ = eos_parameters(mixture, nmol, RT; buf = buf)
     return sum(nmol) * RT / (volume - Bm) - Am/((volume + Cm) * (volume + Dm))
 end
 

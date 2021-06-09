@@ -93,49 +93,66 @@ function wilson_saturation_pressure(Pc::Real, RTc::Real, acentric_factor::Real, 
     return Pc * exp(5.373 * (1.0 + acentric_factor) * (1.0 - RTc / RT))
 end
 
+"""
+    eos_parameters(mixture::BrusilovskyEoSMixture, nmol, RT[; buf])
+
+Returns `Am`, `Bm`, `Cm`, `Dm` coefficients and `aij` matrix of EoS for `mixture` with
+composition `nmol` and thermal energy `RT`. Allocations may be avoided by passing `buf`.
+
+# Arguments
+- `nmol::AbstractVector`: Vector of composition
+- `RT::Real`: Thermal energy (J mol⁻¹)
+
+# Keywords
+- `buf::Union{BrusilovskyThermoBuffer,NamedTuple,AbstractDict}`: Buffer for intermediate
+    calculations. In case of `NamedTuple` and `AbstractDict` `buf` should contain `buf[:ai]`
+    `NC = ncomponents(mixture)` vector and `buf[:aij]` NCxNC matrix.
+"""
 function eos_parameters(
     mixture::BrusilovskyEoSMixture{T},
     nmol::AbstractVector{<:Real},
     RT::Real;
-    buf = NamedTuple()
+    buf = NamedTuple(),
 ) where {T}
     return __eos_parameters_impl__(mixture, nmol, RT, buf)
 end
 
+# When `buf` is BrusilovskyThermoBuffer
 function __eos_parameters_impl__(
     mixture::BrusilovskyEoSMixture{T},
     nmol::AbstractVector{<:Real},
     RT::Real,
-    buf::BrusilovskyThermoBuffer{T}
+    buf::BrusilovskyThermoBuffer{T},
 ) where {T}
     aij = buf.matr
     ai = buf.vec1
-    map!(comp -> a_coef(comp, RT), ai, mixture.components)
-
-    Bm = Cm = Dm = zero(T)
-    @inbounds for i in eachindex(nmol, mixture.components)
-        Bm += nmol[i] * mixture.components[i].b
-        Cm += nmol[i] * mixture.components[i].c
-        Dm += nmol[i] * mixture.components[i].d
-    end
-
-    temp = RT / GAS_CONSTANT_SI - 273.16
-    eij, gij, hij = mixture.eij, mixture.gij, mixture.hij
-    aij .= (one(T) .- (eij .+ temp .* (gij .+ temp .* hij))) .* sqrt.(ai .* ai')
-    # WARNING: at least Julia 1.4 is required for 3-argument `dot`
-    Am = dot(nmol, aij, nmol)
-    return Am, Bm, Cm, Dm, aij
+    return __eos_parameters_impl__(mixture, nmol, RT, ai, aij)
 end
 
+# When `buf` is mapping-like object
 function __eos_parameters_impl__(
     mixture::BrusilovskyEoSMixture{T},
     nmol::AbstractVector{<:Real},
     RT::Real,
-    buf::Union{NamedTuple, AbstractDict}
+    buf::Union{NamedTuple, AbstractDict},
 ) where {T}
     nc = length(nmol)
     aij = haskey(buf, :aij) ? buf[:aij] : Matrix{T}(undef, nc, nc)
     ai = haskey(buf, :ai) ? buf[:ai] : Vector{T}(undef, nc)
+    return __eos_parameters_impl__(mixture, nmol, RT, ai, aij)
+end
+
+# Core function
+# See Brusilovsky2002 [p 187, eqs 4.159, 4.163-4.165] and [p 189, eq 4.168]
+function __eos_parameters_impl__(
+    mixture::BrusilovskyEoSMixture{T},
+    nmol::AbstractVector{<:Real},
+    RT::Real,
+    auxv::AbstractVector{<:Real},
+    auxm::AbstractMatrix{<:Real},
+) where {T}
+    ai, aij = auxv, auxm
+
     map!(comp -> a_coef(comp, RT), ai, mixture.components)
 
     Bm = Cm = Dm = zero(T)
@@ -148,8 +165,7 @@ function __eos_parameters_impl__(
     temp = RT / GAS_CONSTANT_SI - 273.16
     eij, gij, hij = mixture.eij, mixture.gij, mixture.hij
     aij .= (one(T) .- (eij .+ temp .* (gij .+ temp .* hij))) .* sqrt.(ai .* ai')
-    # WARNING: at least Julia 1.4 is required for 3-argument `dot`
-    Am = dot(nmol, aij, nmol)
+    Am = dot(nmol, aij, nmol)  # Am = nmolᵀ aij nmol
     return Am, Bm, Cm, Dm, aij
 end
 

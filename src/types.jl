@@ -1,5 +1,3 @@
-export BrusilovskyEoSComponent, BrusilovskyEoSMixture
-
 abstract type AbstractEoSComponent end
 
 abstract type AbstractEoSMixture end
@@ -9,7 +7,7 @@ const NothingOrT{T} = Union{Nothing,T}
 struct BrusilovskyEoSComponent{T<:Number} <: AbstractEoSComponent
     # meta information
     name::String
-    
+
     # physical parameters
     Pc::T  # critical pressure
     acentric_factor::T
@@ -23,7 +21,7 @@ struct BrusilovskyEoSComponent{T<:Number} <: AbstractEoSComponent
     c::T      # explicit coefficient of the eos c
     d::T      # explicit coefficient of the eos d
     Psi::T    # primary coefficient of the eos - \Psi
-    
+
     function BrusilovskyEoSComponent{T}(
         ;
         name::AbstractString="No Name",
@@ -80,7 +78,8 @@ struct BrusilovskyEoSMixture{T} <: AbstractEoSMixture
     gij::Matrix{T} # linear    thermal binary interaction coefficient
     hij::Matrix{T} # quadratic thermal binary interaction coefficient
 
-    function BrusilovskyEoSMixture( ;
+    function BrusilovskyEoSMixture(
+        ;
         components::AbstractVector{BrusilovskyEoSComponent{T}},
         constant::AbstractMatrix,
         linear::AbstractMatrix,
@@ -91,4 +90,39 @@ struct BrusilovskyEoSMixture{T} <: AbstractEoSMixture
     end
 end
 
-@inline Base.@propagate_inbounds Base.getindex(mix::BrusilovskyEoSMixture, i::Integer) = mix.components[i]
+@inline Base.@propagate_inbounds function Base.getindex(
+    mix::BrusilovskyEoSMixture,
+    i::Integer
+)
+    return mix.components[i]
+end
+
+struct BrusilovskyThermoBuffer{T}
+    matr::Matrix{T}
+    vec1::Vector{T}
+    vec2::Vector{T}
+end
+
+function BrusilovskyThermoBuffer{T}(n::Integer) where {T}
+    matr = Matrix{T}(undef, n, n)
+    vec1 = similar(matr, (n,))
+    vec2 = similar(vec1)
+    return BrusilovskyThermoBuffer{T}(matr, vec1, vec2)
+end
+
+BrusilovskyThermoBuffer(n::Integer) = BrusilovskyThermoBuffer{Float64}(n)
+
+function BrusilovskyThermoBuffer(mix::BrusilovskyEoSMixture{T}) where {T}
+    nc = ncomponents(mix)
+    return BrusilovskyThermoBuffer{T}(nc)
+end
+
+"""
+    thermo_buffer(mix)
+
+Create a buffer for intermediate calculations of mixture thermodynamic properties.
+
+See also: [`pressure`](@ref), [`log_c_activity`](@ref), [`log_c_activity!`](@ref),
+[`log_c_activity_wj`](@ref), [`log_c_activity_wj!`](@ref)
+"""
+thermo_buffer(mix::BrusilovskyEoSMixture) = BrusilovskyThermoBuffer(mix)

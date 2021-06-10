@@ -1,22 +1,83 @@
 #=
 VT stability algorithm
 =#
-export vt_stability
 
 using DescentMethods
 
-struct StabilityBuffer{M, P}
-    mixture_eos::M
-    parent_phase::P
-    test_phase::P
+struct VTStabilityBuffer{B}
+    solver_buffer::B
 end
 
-function StabilityBuffer(mix::BrusilovskyEoSMixture{T}) where {T}
-    nc = ncomponents(mix)
-    parent_phase = ()
-    test_phase = ()
-    return StabilityBuffer(mix, parent_phase, test_phase)
+@inline function Base.getproperty(b::VTStabilityBuffer, p::Symbol)
+    sol_buf = getfield(b, :solver_buffer)
+    return getproperty(sol_buf, p)
 end
+
+@inline function Base.getindex(b::VTStabilityBuffer, p::Symbol)
+    sol_buf = getfield(b, :solver_buffer)
+    return getproperty(sol_buf, p)
+end
+
+@inline function Base.propertynames(b::VTStabilityBuffer)
+    sol_buf = getfield(b, :solver_buffer)
+    return propertynames(sol_buf)
+end
+
+function VTStabilityBuffer(mix::BrusilovskyEoSMixture)
+    thermo_buf = BrusilovskyThermoBuffer(mix)
+    loga_parent = similar(thermo_buf.vec1)
+    loga_test = similar(loga_parent)
+    p_sat = similar(loga_parent)
+    bi = similar(loga_parent)
+    nmol_test = similar(loga_parent)
+    jacobian = similar(thermo_buf.matr)
+
+    solver_buffer = (
+        ;
+        loga_parent = loga_parent,
+        loga_test = loga_test,
+        p_sat = p_sat,
+        bi = bi,
+        nmol_test = nmol_test,
+        jacobian = jacobian,
+        thermo_buf = thermo_buf,
+    )
+    return VTStabilityBuffer(solver_buffer)
+end
+
+function VTStabilityBuffer(
+    thermo_buf::BrusilovskyThermoBuffer
+)
+    loga_parent = similar(thermo_buf.vec1)
+    loga_test = similar(loga_parent)
+    p_sat = similar(loga_parent)
+    bi = similar(loga_parent)
+    nmol_test = similar(loga_parent)
+    jacobian = similar(thermo_buf.matr)
+
+    solver_buffer = (
+        ;
+        loga_parent = loga_parent,
+        loga_test = loga_test,
+        p_sat = p_sat,
+        bi = bi,
+        nmol_test = nmol_test,
+        jacobian = jacobian,
+        thermo_buf = thermo_buf,
+    )
+    return VTStabilityBuffer(solver_buffer)
+end
+
+"""
+    vt_stability_buffer(mix)
+
+Create a buffer for intermediate calculations of one-phase stability of a mixture.
+
+For more info see ?vt_stability(mixture).
+
+See also: [`vt_stability`](@ref), [`thermo_buffer`](@ref)
+"""
+vt_stability_buffer(x) = VTStabilityBuffer(x)
 
 """
 Оптимизационная процедура для алгоритма проверки стабильности.
@@ -29,17 +90,20 @@ end
 <- D_min (NaN if not converged)
 """
 function vt_stability_optim_try!(
-        optmethod,
-        η_::AbstractVector,  # вектор концентраций, должен быть инициализирован начальными значениями
-        grad_::AbstractVector,
-        Dfunc!::Function,  # функция D вида D!(η', ∇D_) -> D::Number
-        maxstep::Function,
-    ) where {T}
+    optmethod,
+    η_::AbstractVector,  # вектор концентраций, должен быть инициализирован начальными значениями
+    grad_::AbstractVector,
+    Dfunc!::Function,  # функция D вида D!(η', ∇D_) -> D::Number
+    maxstep::Function,
+)
 
     is_converged = false
 
     try
-        result = DescentMethods.optimize!(optmethod, Dfunc!, η_,
+        result = DescentMethods.optimize!(
+            optmethod,
+            Dfunc!,
+            η_,
             gtol=1e-3,
             maxiter=1000,
             constrain_step=maxstep,
@@ -63,70 +127,90 @@ function vt_stability_optim_try!(
 end
 
 function vt_stability(
-    mix::BrusilovskyEoSMixture,
+    mix::BrusilovskyEoSMixture{T},
     nmol::AbstractVector,
     volume,
-    RT)
+    RT;
+    vtstab_buf::VTStabilityBuffer = VTStabilityBuffer(mix),
+) where {T}
 
     nc = length(mix)
-    jacobian_test = zeros(nc, nc)
-    aij = zeros(nc, nc)
 
-    loga_parent = similar(nmol)
-    loga_test = similar(nmol)
+    loga_parent = vtstab_buf.loga_parent
+    loga_test = vtstab_buf.loga_test
+    jacobian = vtstab_buf.jacobian
+    thermo_buf = vtstab_buf.thermo_buf
+    bi = vtstab_buf.bi
+    p_sat = vtstab_buf.p_sat
+    nmol_test = vtstab_buf.nmol_test
 
-    aux1, aux2 = similar(nmol), similar(nmol)
-
-    log_activity!(loga_parent, aux1, aij, mix, nmol, volume, RT)
+    log_c_activity!(loga_parent, mix, nmol, volume, RT; buf = thermo_buf)
     loga_parent .+= log.(nmol ./ volume)
-    p_parent = pressure!(aij, aux1, mix, nmol, volume, RT)
+    p_parent = pressure(mix, nmol, volume, RT; buf = thermo_buf)
 
     thresh = -1e-5
 
-    b = [comp.b for comp in components(mix)]
+    comp = components(mix)
+    map!(subst -> subst.b, bi, comp)
+    p_sat .= wilson_saturation_pressure.(comp, RT)
     function stabilitytest!(nmol_test, grad)
-        log_activity!(grad, aux1, aij, mix, nmol_test, 1, RT)
-        p_test = pressure!(aij, aux1, mix, nmol_test, 1, RT)
+        log_c_activity!(grad, mix, nmol_test, 1, RT; buf = thermo_buf)
+        p_test = pressure(mix, nmol_test, 1, RT; buf = thermo_buf)
         grad .+= log.(nmol_test)
         grad .-= loga_parent
         D = dot(grad, nmol_test) - (p_test - p_parent) / RT
         return D, grad
     end
 
-    function stability_step(nmol_test, d)
+    function stability_step(nmol_test, dir)
         αm = convert(eltype(nmol_test), Inf)
-        @inbounds for i in eachindex(nmol_test, d)
-            α = -nmol_test[i] / d[i]
+        @inbounds for i in eachindex(nmol_test, dir)
+            α = -nmol_test[i] / dir[i]
             if 0 < α < αm
                 αm = α
             end
         end
-        α = (1 - nmol_test' * b) / (d' * b)  # Σ(xᵢ+αdᵢ)bᵢ < 1, covolume constrain
+        α = (1 - nmol_test' * bi) / (dir' * bi)  # Σ(xᵢ+αdᵢ)bᵢ < 1, covolume constrain
         if 0 < α < αm
             αm = α
         end
         return αm
     end
 
+    function D_min(nmol_test, optmethod)
+        _, jacobian = log_c_activity_wj!(
+            loga_test,
+            jacobian,
+            mix,
+            nmol_test,
+            1,
+            RT;
+            buf = thermo_buf,
+        )
+        for i in 1:nc
+            jacobian[i,i] += 1 / nmol_test[i]
+        end
+        DescentMethods.reset!(optmethod, nmol_test, jacobian)
+        return vt_stability_optim_try!(
+            optmethod,
+            nmol_test,
+            loga_test,
+            stabilitytest!,
+            stability_step,
+        )
+    end
+
     optmethod = DescentMethods.CholBFGS(nmol)
 
-    comp = mix.components
-    p_sat = [wilson_saturation_pressure(comp[i], RT) for i in 1:nc]
     # Initial - gas
     p_init = dot(p_sat, nmol) / sum(nmol)
-    nmol_test = nmol .* p_sat ./ p_init
+    nmol_test .= nmol .* p_sat ./ p_init
 
     # Test - gas
     z_gg = compressibility(mix, nmol_test, p_init, RT, 'g')
-    ntest_gg = nmol_test .* (p_init / (z_gg * RT * sum(nmol_test)))
+    nmol_test .*= p_init / (z_gg * RT * sum(nmol_test))
 
-    _, jacobian_test = log_activity_wj!(loga_test, jacobian_test, aij, aux1, aux2, mix, ntest_gg, 1, RT)
-    for i in 1:nc
-        jacobian_test[i,i] += 1 / ntest_gg[i]
-    end
-    DescentMethods.reset!(optmethod, ntest_gg, jacobian_test)
-
-    D_gg = vt_stability_optim_try!(optmethod, ntest_gg, loga_test, stabilitytest!, stability_step)
+    D_gg = D_min(nmol_test, optmethod)
 
     if D_gg < thresh
         return false, optmethod.x
@@ -134,36 +218,24 @@ function vt_stability(
 
     # Test - liquid
     z_gl = compressibility(mix, nmol_test, p_init, RT, 'l')
-    ntest_gl = nmol_test .* (p_init / (z_gl * RT * sum(nmol_test)))
+    nmol_test .*= z_gg / z_gl
 
-    _, jacobian_test = log_activity_wj!(loga_test, jacobian_test, aij, aux1, aux2, mix, ntest_gl, 1, RT)
-    for i in 1:nc
-        jacobian_test[i,i] += 1 / ntest_gl[i]
-    end
-    DescentMethods.reset!(optmethod, ntest_gl, jacobian_test)
-
-    D_gl = vt_stability_optim_try!(optmethod, ntest_gl, loga_test, stabilitytest!, stability_step)
+    D_gl = D_min(nmol_test, optmethod)
 
     if D_gl < thresh
         return false, optmethod.x
     end
 
     # Initial - liquid
-    nmol_test = nmol ./ p_sat ./ sum(nmol[i] / p_sat[i] for i in 1:nc)
+    nmol_test .= nmol ./ p_sat ./ sum(nmol[i] / p_sat[i] for i in 1:nc)
     p_init = dot(p_sat, nmol_test)
 
     # Test - gas
-    
+
     z_lg = compressibility(mix, nmol_test, p_init, RT, 'g')
-    ntest_lg = nmol_test .* (p_init / (z_lg * RT * sum(nmol_test)))
+    nmol_test .*= p_init / (z_lg * RT * sum(nmol_test))
 
-    _, jacobian_test = log_activity_wj!(loga_test, jacobian_test, aij, aux1, aux2, mix, ntest_lg, 1, RT)
-    for i in 1:nc
-        jacobian_test[i,i] += 1 / ntest_lg[i]
-    end
-    DescentMethods.reset!(optmethod, ntest_lg, jacobian_test)
-
-    D_lg = vt_stability_optim_try!(optmethod, ntest_lg, loga_test, stabilitytest!, stability_step)
+    D_lg = D_min(nmol_test, optmethod)
 
     if D_lg < thresh
         return false, optmethod.x
@@ -171,15 +243,9 @@ function vt_stability(
 
     # Test - liquid
     z_ll = compressibility(mix, nmol_test, p_init, RT, 'l')
-    ntest_ll = nmol_test .* (p_init / (z_ll * RT * sum(nmol_test)))
+    nmol_test .*= z_lg / z_ll
 
-    _, jacobian_test = log_activity_wj!(loga_test, jacobian_test, aij, aux1, aux2, mix, ntest_ll, 1, RT)
-    for i in 1:nc
-        jacobian_test[i,i] += 1 / ntest_ll[i]
-    end
-    DescentMethods.reset!(optmethod, ntest_ll, jacobian_test)
-
-    D_ll = vt_stability_optim_try!(optmethod, ntest_ll, loga_test, stabilitytest!, stability_step)
+    D_ll = D_min(nmol_test, optmethod)
 
     if D_ll < thresh
         return false, optmethod.x

@@ -24,49 +24,47 @@ c4h10 = BrusilovskyEoSComponent(
 
 c1c4cij = [
     0 0.01
-    0.01 0]
+    0.01 0
+]
 
-c1c4mix = BrusilovskyEoSMixture(components = [ch4, c4h10],
-                                constant = c1c4cij,
-                                linear = zeros(2,2),
-                                quadratic = zeros(2,2))
-
-c1c4_chem_mix = CubicEoS.ChemPotentialMixture(c1c4mix)
+c1c4mix = BrusilovskyEoSMixture(
+    components = [ch4, c4h10],
+    constant = c1c4cij,
+    linear = zeros(2,2),
+    quadratic = zeros(2,2)
+)
 
 nmol = [500., 500]
 
-p = pressure(c1c4mix, nmol, 2.0, 8.314 * 300)
+thermo_buf = CubicEoS.BrusilovskyThermoBuffer(c1c4mix)
+
+p = pressure(c1c4mix, nmol, 2.0, 8.314 * 300; buf = thermo_buf)
 println("Pressure: ", p, " Pa")
 
-log_a = zeros(2)
-ai = zeros(2)
-aij = zeros(2, 2)
+function log_a(mix, nmol, vol, RT)
+    return CubicEoS.log_c_activity(mix, nmol, vol, RT; buf = thermo_buf)
+end
 
-chempot(nmol) = 8.314 .* 300 .* (log.(nmol) .+ 
-                                 CubicEoS.log_activity!(c1c4_chem_mix, 
-                                                        nmol, 
-                                                        2.0, 
-                                                        8.314*300))
-helmholtz(nmol) = sum(nmol .* chempot(nmol)) - CubicEoS.pressure!(c1c4_chem_mix, nmol, 2.0, 8.314 * 300)
-println("Helmholtz energy: ", helmholtz(nmol))
+chempot(nmol) = 8.314 .* 300 .* (log.(nmol) .+ log_a(c1c4mix, nmol, 2.0, 8.314*300))
+
+function helmholtz(nmol, vol)
+    f = sum(nmol .* chempot(nmol))
+    f -= vol * pressure(c1c4mix, nmol, vol, 8.314 * 300; buf = thermo_buf)
+    return f
+end
+
+println("Helmholtz energy: ", helmholtz(nmol, 2.0))
 
 nmol1 = nmol .+ (1, 0)
-println("Approx. chemical potential: ", helmholtz(nmol1) - helmholtz(nmol))
+println("Approx. chemical potential: ", helmholtz(nmol1, 2.0) - helmholtz(nmol, 2.0))
 
 println("Chemical potential: ", chempot(nmol))
 
-(CubicEoS.log_activity(
-c1c4mix, 
-nmol1, 
-2.0, 
-8.314*300) - CubicEoS.log_activity(
-    c1c4mix, 
-    nmol, 
-    2.0, 
-    8.314*300)) |> println
+(log_a(c1c4mix, nmol1, 2.0, 8.314*300) - log_a(c1c4mix, nmol, 2.0, 8.314*300)) |> println
 
-CubicEoS.log_activity_wj!(
-c1c4_chem_mix, 
-nmol, 
-2.0, 
-8.314*300)
+CubicEoS.log_c_activity_wj(
+    c1c4mix,
+    nmol,
+    2.0,
+    8.314*300
+)

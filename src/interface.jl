@@ -1,4 +1,3 @@
-export molar_mass, carbon_number, name, describe, load, components
 """
     molar_mass(c::AbstractEoSComponent)
 
@@ -7,9 +6,9 @@ Return the molar mass of a component.
 function molar_mass end
 
 """
-    molar_mass(c::AbstractEoSComponent)
+    carbon_number(c::AbstractEoSComponent)
 
-Return the molar mass of a component.
+Return the number of carbons atoms in the hydrocarbon chain.
 """
 function carbon_number end
 
@@ -28,9 +27,9 @@ Return `Dict` of parameters. Useful for logging.
 function describe end
 
 """
-    load(::Type{T}; name::AbstractString, physdb::AbstractString) where {T<:AbstractEoSComponent}
+    load(::Type{T}; name::AbstractString, databases) where {T<:AbstractEoSComponent}
 
-Load component `::T` by its `name` and `physdb` from database.
+Load component `::T` by its `name` by joining the data on this species in `databases`.
 """
 function load end
 

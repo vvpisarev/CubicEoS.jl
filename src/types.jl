@@ -122,8 +122,6 @@ end
 
 Create a buffer for intermediate calculations of mixture thermodynamic properties.
 
-For more info see ?pressure(mixture).
-
 See also: [`pressure`](@ref), [`log_c_activity`](@ref), [`log_c_activity!`](@ref),
 [`log_c_activity_wj`](@ref), [`log_c_activity_wj!`](@ref)
 """

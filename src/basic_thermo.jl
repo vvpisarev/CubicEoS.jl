@@ -26,7 +26,8 @@ end
 """
     pressure(substance, υ, RT)
 
-Compute pressure (Pa) of `substance` at given molar volume `υ` (m³ mol⁻¹) and thermal energy `RT` (J mol⁻¹).
+Compute pressure (Pa) of `substance` at given molar volume `υ` (m³ mol⁻¹) and
+thermal energy `RT` (J mol⁻¹).
 """
 function pressure(substance::BrusilovskyEoSComponent, υ::Real, RT::Real)
     acoeff = a_coef(substance, RT)
@@ -39,7 +40,8 @@ end
 """
     pressure(substance, nmol, V, RT)
 
-Compute pressure (Pa) of `substance` at given number of moles `nmol` (mol), total volume `V` (m³) and thermal energy `RT` (J mol⁻¹).
+Compute pressure (Pa) of `substance` at given number of moles `nmol` (mol),
+total volume `V` (m³) and thermal energy `RT` (J mol⁻¹).
 """
 function pressure(substance::BrusilovskyEoSComponent, nmol::Real, V::Real, RT::Real)
     acoeff = a_coef(substance, RT)
@@ -53,7 +55,8 @@ end
 """
     pressure(substance; nmol = 1, volume, temperature)
 
-Computes pressure (Pa) of `substance` at given number of moles `nmol` (mol), total volume (m³) and temperature (K).
+Compute pressure (Pa) of `substance` at given number of moles `nmol` (mol),
+total volume (m³) and temperature (K).
 """
 function pressure(
     substance::BrusilovskyEoSComponent;
@@ -68,7 +71,7 @@ end
 """
     wilson_saturation_pressure(substance, RT)
 
-Returns approximate saturation pressure of `substance` at `RT` (J mol⁻¹).
+Return approximate saturation pressure of `substance` at `RT` (J mol⁻¹).
 
 Reference: Brusilovsky2002 [p 272, eq 5.4]
 """
@@ -171,7 +174,7 @@ function __eos_parameters_impl__(
 end
 
 """
-    pressure(mixture, nmol, volume, RT[, buf])
+    pressure(mixture, nmol, volume, RT[; buf])
 
 Return pressure (Pa) of `mixture` at given
 
@@ -185,6 +188,8 @@ Allocations may be avoided by passing `buf`.
 - `buf::Union{BrusilovskyThermoBuffer,NamedTuple,AbstractDict}`: Buffer for intermediate
     calculations. In case of `NamedTuple` and `AbstractDict` `buf` should contain `buf[:ai]`
     `NC = ncomponents(mixture)` vector and `buf[:aij]` NCxNC matrix.
+
+See also: [`thermo_buffer`](@ref)
 """
 function pressure(
     mixture::BrusilovskyEoSMixture,
@@ -198,7 +203,7 @@ function pressure(
 end
 
 """
-    compressibility(mixture, χ, P, RT[, phase='g'])
+    compressibility(mixture, χ, P, RT[, phase='g'][; buf])
 
 Compute compressibility (z-factor) of `mixture` in `phase` at given
 
@@ -208,8 +213,13 @@ Compute compressibility (z-factor) of `mixture` in `phase` at given
 
 # Optional arguments
 
-- `phase::AbstractChar='g'` - specifies phase of `mixture` (`'g'` for gas, `'l'` for liquid)
-- `buffer::BrusilovskyEoSMixtureBuffer` - buffer for intermediate calculations
+- `phase::AbstractChar='g'`: specifies phase of `mixture` (`'g'` for gas, `'l'` for liquid)
+
+# Keywords:
+- `buf::Union{BrusilovskyThermoBuffer,NamedTuple,AbstractDict}`: buffer for intermediate
+    calculations (see [`pressure`](@ref))
+
+See also: [`pressure`](@ref)
 """
 function compressibility(
     mix::BrusilovskyEoSMixture,

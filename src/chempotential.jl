@@ -3,7 +3,7 @@ Functions to compute chemical potential-related characteristics
 =#
 
 """
-    log_c_activity(mixture, nmol, volume, RT; buf = (;))
+    log_c_activity(mixture, nmol, volume, RT[; buf])
 
 Return vector of ln(c_a) - logarithm of activity coefficients
 for components of `mixture` at given `nmol`, `volume`, `RT`.
@@ -20,7 +20,7 @@ are modified during the intermediate calculations.
 # Keywords
 
 - `buf::Union{NamedTuple, AbstractDict, BrusilovskyThermoBuffer}`: buffers for intermediate
-    calculations
+    calculations (see [`pressure`](@ref))
 
 # Returns
 
@@ -28,6 +28,7 @@ are modified during the intermediate calculations.
     number of moles, volume and temperature
 
 See (Jirí Mikyska, Abbas Firoozabadi // 10.1002/aic.12387)
+
 See also: [`log_c_activity!`](@ref), [`log_c_activity_wj`](@ref), [`log_c_activity_wj!`](@ref)
 """
 function log_c_activity(
@@ -45,7 +46,7 @@ function log_c_activity(
 end
 
 """
-    log_c_activity!(log_ca, mixture, nmol, volume, RT; buf = (;))
+    log_c_activity!(log_ca, mixture, nmol, volume, RT[; buf])
 
 Return vector of ln(c_a) - logarithm of activity coefficients
 for components of `mixture` at given `nmol`, `volume`, `RT`.
@@ -64,7 +65,7 @@ in `log_ca`.
 # Keywords
 
 - `buf::Union{BrusilovskyThermoBuffer, NamedTuple, AbstractDict}`: buffers for intermediate
-calculations
+    calculations (see [`pressure`](@ref))
 
 # Returns
 
@@ -72,6 +73,7 @@ calculations
     number of moles, volume and temperature
 
 See (Jirí Mikyska, Abbas Firoozabadi // 10.1002/aic.12387)
+
 See also: [`log_c_activity`](@ref), [`log_c_activity_wj`](@ref), [`log_c_activity_wj!`](@ref)
 """
 function log_c_activity!(
@@ -131,15 +133,16 @@ are modified during the intermediate calculations.
 - `volume`: volume of the mixture (m³)
 - `RT`: thermal energy (J/mol)
 
+# Keywords
+
+- `buf::BrusilovskyThermoBuffer`: buffers for intermediate calculations
+    (see [`thermo_buffer`](@ref))
+
 # Returns
 
 - `Tuple{AbstractVector,AbstractMatrix}`: the logarithms of activity coefficients
 of the components at given number of moles, volume and temperature, and the jacobian
 matrix ∂ln(c_a[i]) / ∂n[j].
-
-# Keyword arguments
-
-- `buf::BrusilovskyThermoBuffer`: buffers for intermediate calculations
 
 See also: [`log_c_activity`](@ref), [`log_c_activity!`](@ref), [`log_c_activity_wj!`](@ref)
 """
@@ -175,15 +178,16 @@ are modified during the intermediate calculations.
 - `volume`: volume of the mixture (m³)
 - `RT`: thermal energy (J/mol)
 
+# Keywords
+
+- `buf::BrusilovskyThermoBuffer`: buffers for intermediate calculations
+    (see [`thermo_buffer`](@ref))
+
 # Returns
 
 - `Tuple{AbstractVector,AbstractMatrix}`: the logarithms of activity coefficients
 of the components at given number of moles, volume and temperature, and the jacobian
 matrix ∂ln(c_a[i]) / ∂n[j]. The values are aliases for the first two arguments.
-
-# Keyword arguments
-
-- `buf::BrusilovskyThermoBuffer`: buffers for intermediate calculations
 
 See also: [`log_c_activity`](@ref), [`log_c_activity!`](@ref), [`log_c_activity_wj`](@ref)
 """

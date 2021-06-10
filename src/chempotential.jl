@@ -17,24 +17,25 @@ are modified during the intermediate calculations.
 - `volume`: volume of the mixture (m³)
 - `RT`: thermal energy (J/mol)
 
-# Returns
-
-- `AbstractVector`: the logarithms of activity coefficients
-of the components at given number of moles, volume and temperature
-
-# Keyword arguments
+# Keywords
 
 - `buf::Union{NamedTuple, AbstractDict, BrusilovskyThermoBuffer}`: buffers for intermediate
-calculations
+    calculations
+
+# Returns
+
+- `AbstractVector`: the logarithms of activity coefficients of the components at given
+    number of moles, volume and temperature
 
 See (Jirí Mikyska, Abbas Firoozabadi // 10.1002/aic.12387)
+See also: [`log_c_activity!`](@ref), [`log_c_activity_wj`](@ref), [`log_c_activity_wj!`](@ref)
 """
 function log_c_activity(
     mix::BrusilovskyEoSMixture{T},
     nmol::AbstractVector,
     volume::Real,
     RT::Real;
-    buf = NamedTuple()
+    buf = NamedTuple(),
 ) where {T}
 
     nc = ncomponents(mix)
@@ -60,17 +61,18 @@ in `log_ca`.
 - `volume`: volume of the mixture (m³)
 - `RT`: thermal energy (J/mol)
 
-# Returns
-
-- `AbstractVector`: the logarithms of activity coefficients
-of the components at given number of moles, volume and temperature
-
-# Keyword arguments
+# Keywords
 
 - `buf::Union{BrusilovskyThermoBuffer, NamedTuple, AbstractDict}`: buffers for intermediate
 calculations
 
+# Returns
+
+- `AbstractVector`: the logarithms of activity coefficients of the components at given
+    number of moles, volume and temperature
+
 See (Jirí Mikyska, Abbas Firoozabadi // 10.1002/aic.12387)
+See also: [`log_c_activity`](@ref), [`log_c_activity_wj`](@ref), [`log_c_activity_wj!`](@ref)
 """
 function log_c_activity!(
     log_ca::AbstractVector,
@@ -78,7 +80,7 @@ function log_c_activity!(
     nmol::AbstractVector,
     volume,
     RT;
-    buf = NamedTuple()
+    buf = NamedTuple(),
 )
     nc = ncomponents(mix)
     ∑mol = sum(nmol)
@@ -114,7 +116,7 @@ function log_c_activity!(
 end
 
 """
-    log_activity_wj(mixture, nmol, volume, RT[; buf])
+    log_c_activity_wj(mixture, nmol, volume, RT[; buf])
 
 Return vector of ln(c_a) - logarithm of activity coefficient
 for components of `mixture` at given `nmol`, `volume`, `RT` -
@@ -137,15 +139,16 @@ matrix ∂ln(c_a[i]) / ∂n[j].
 
 # Keyword arguments
 
-- `buf::BrusilovskyThermoBuffer`: buffers for intermediate
-calculations
+- `buf::BrusilovskyThermoBuffer`: buffers for intermediate calculations
+
+See also: [`log_c_activity`](@ref), [`log_c_activity!`](@ref), [`log_c_activity_wj!`](@ref)
 """
 function log_c_activity_wj(
     mix::BrusilovskyEoSMixture{T},
     nmol::AbstractVector,
     volume::Real,
     RT::Real;
-    buf = nothing
+    buf::BrusilovskyThermoBuffer = thermo_buffer(mix),
 ) where {T}
     nc = ncomponents(mix)
     log_ca = Vector{T}(undef, nc)
@@ -180,8 +183,9 @@ matrix ∂ln(c_a[i]) / ∂n[j]. The values are aliases for the first two argumen
 
 # Keyword arguments
 
-- `buf::BrusilovskyThermoBuffer`: buffers for intermediate
-calculations
+- `buf::BrusilovskyThermoBuffer`: buffers for intermediate calculations
+
+See also: [`log_c_activity`](@ref), [`log_c_activity!`](@ref), [`log_c_activity_wj`](@ref)
 """
 function log_c_activity_wj!(
     log_ca::AbstractVector,
@@ -190,7 +194,7 @@ function log_c_activity_wj!(
     nmol::AbstractVector,
     volume::Real,
     RT::Real;
-    buf = nothing
+    buf::BrusilovskyThermoBuffer = thermo_buffer(mix),
 )
     return __log_c_activity_wj_impl__(log_ca, jacobian, mix, nmol, volume, RT, buf)
 end
@@ -200,9 +204,9 @@ function __log_c_activity_wj_impl__(
     jacobian::AbstractMatrix,
     mix::BrusilovskyEoSMixture,
     nmol::AbstractVector,
-    volume::Real,
-    RT::Real,
-    buf::BrusilovskyThermoBuffer
+    volume,
+    RT,
+    buf::BrusilovskyThermoBuffer,
 )
     A, B, C, D, aij = eos_parameters(mix, nmol, RT; buf = buf)
 
@@ -250,17 +254,4 @@ function __log_c_activity_wj_impl__(
 
     jacobian .-= AbyRTCmD .* (aux1 .* aux1' .- aux2 .* aux2')
     return log_ca, jacobian
-end
-
-function __log_c_activity_wj_impl__(
-    log_ca::AbstractVector,
-    jacobian::AbstractMatrix,
-    mix::BrusilovskyEoSMixture,
-    nmol::AbstractVector,
-    volume::Real,
-    RT::Real,
-    buf::Nothing
-)
-    thermo_buf = BrusilovskyThermoBuffer(mix)
-    return __log_c_activity_wj_impl__(log_ca, jacobian, mix, nmol, volume, RT, thermo_buf)
 end

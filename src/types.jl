@@ -78,7 +78,8 @@ struct BrusilovskyEoSMixture{T} <: AbstractEoSMixture
     gij::Matrix{T} # linear    thermal binary interaction coefficient
     hij::Matrix{T} # quadratic thermal binary interaction coefficient
 
-    function BrusilovskyEoSMixture( ;
+    function BrusilovskyEoSMixture(
+        ;
         components::AbstractVector{BrusilovskyEoSComponent{T}},
         constant::AbstractMatrix,
         linear::AbstractMatrix,
@@ -116,4 +117,14 @@ function BrusilovskyThermoBuffer(mix::BrusilovskyEoSMixture{T}) where {T}
     return BrusilovskyThermoBuffer{T}(nc)
 end
 
+"""
+    thermo_buffer(mix)
+
+Create a buffer for intermediate calculations of mixture thermodynamic properties.
+
+For more info see ?pressure(mixture).
+
+See also: [`pressure`](@ref), [`log_c_activity`](@ref), [`log_c_activity!`](@ref),
+[`log_c_activity_wj`](@ref), [`log_c_activity_wj!`](@ref)
+"""
 thermo_buffer(mix::BrusilovskyEoSMixture) = BrusilovskyThermoBuffer(mix)

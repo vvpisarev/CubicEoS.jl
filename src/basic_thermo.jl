@@ -11,7 +11,7 @@ include("solvecubic.jl")
 """
     a_coef(substance, RT)
 
-Returns EoS coefficient ``a(T, Ψ) = a_c ϕ(T, Ψ)`` of `substance` at given `RT`.
+Return EoS coefficient ``a(T, Ψ) = a_c ϕ(T, Ψ)`` of `substance` at given `RT`.
 ```math
 ϕ(T, psi) = [ 1 + Ψ (1 - T_r^0.5) ]^2
 ```
@@ -26,7 +26,7 @@ end
 """
     pressure(substance, υ, RT)
 
-Computes pressure (Pa) of `substance` at given molar volume `υ` (m³ mol⁻¹) and thermal energy `RT` (J mol⁻¹).
+Compute pressure (Pa) of `substance` at given molar volume `υ` (m³ mol⁻¹) and thermal energy `RT` (J mol⁻¹).
 """
 function pressure(substance::BrusilovskyEoSComponent, υ::Real, RT::Real)
     acoeff = a_coef(substance, RT)
@@ -39,7 +39,7 @@ end
 """
     pressure(substance, nmol, V, RT)
 
-Computes pressure (Pa) of `substance` at given number of moles `nmol` (mol), total volume `V` (m³) and thermal energy `RT` (J mol⁻¹).
+Compute pressure (Pa) of `substance` at given number of moles `nmol` (mol), total volume `V` (m³) and thermal energy `RT` (J mol⁻¹).
 """
 function pressure(substance::BrusilovskyEoSComponent, nmol::Real, V::Real, RT::Real)
     acoeff = a_coef(substance, RT)
@@ -55,10 +55,12 @@ end
 
 Computes pressure (Pa) of `substance` at given number of moles `nmol` (mol), total volume (m³) and temperature (K).
 """
-function pressure(substance::BrusilovskyEoSComponent;
-                  nmol::Real = 1,
-                  volume::Real,
-                  temperature::Real)
+function pressure(
+    substance::BrusilovskyEoSComponent;
+    nmol::Real = 1,
+    volume::Real,
+    temperature::Real,
+)
     RT = GAS_CONSTANT_SI * temperature
     return pressure(substance, nmol, volume, RT)
 end
@@ -96,7 +98,7 @@ end
 """
     eos_parameters(mixture::BrusilovskyEoSMixture, nmol, RT[; buf])
 
-Returns `Am`, `Bm`, `Cm`, `Dm` coefficients and `aij` matrix of EoS for `mixture` with
+Return `Am`, `Bm`, `Cm`, `Dm` coefficients and `aij` matrix of EoS for `mixture` with
 composition `nmol` and thermal energy `RT`. Allocations may be avoided by passing `buf`.
 
 # Arguments
@@ -107,11 +109,11 @@ composition `nmol` and thermal energy `RT`. Allocations may be avoided by passin
 - `buf`: see ?pressure(mixture)
 """
 function eos_parameters(
-    mixture::BrusilovskyEoSMixture{T},
+    mixture::BrusilovskyEoSMixture,
     nmol::AbstractVector{<:Real},
     RT::Real;
     buf = NamedTuple(),
-) where {T}
+)
     return __eos_parameters_impl__(mixture, nmol, RT, buf)
 end
 
@@ -151,13 +153,14 @@ function __eos_parameters_impl__(
 ) where {T}
     ai, aij = auxv, auxm
 
-    map!(comp -> a_coef(comp, RT), ai, mixture.components)
+    comp = mixture.components
+    ai .= a_coef.(comp, RT)
 
     Bm = Cm = Dm = zero(T)
-    @inbounds for i in eachindex(nmol, mixture.components)
-        Bm += nmol[i] * mixture.components[i].b
-        Cm += nmol[i] * mixture.components[i].c
-        Dm += nmol[i] * mixture.components[i].d
+    @inbounds for i in eachindex(nmol, comp)
+        Bm += nmol[i] * comp[i].b
+        Cm += nmol[i] * comp[i].c
+        Dm += nmol[i] * comp[i].d
     end
 
     temp = RT / GAS_CONSTANT_SI - 273.16
@@ -170,7 +173,7 @@ end
 """
     pressure(mixture, nmol, volume, RT[, buf])
 
-Returns pressure (Pa) of `mixture` at given
+Return pressure (Pa) of `mixture` at given
 
 - `nmol::AbstractVector`: composition (molar parts) or number of moles (mol)
 - `volume::Real`: molar volume (m³ mol⁻¹) or volume (m³)
@@ -197,7 +200,7 @@ end
 """
     compressibility(mixture, χ, P, RT[, phase='g'])
 
-Computes compressibility (z-factor) of `mixture` in `phase` at given
+Compute compressibility (z-factor) of `mixture` in `phase` at given
 
 - composition in moles `χ` (mol)
 - pressure `P` (Pa)
@@ -205,7 +208,7 @@ Computes compressibility (z-factor) of `mixture` in `phase` at given
 
 # Optional arguments
 
-- `phase::Char='g'` - specifies phase of `mixture` (`'g'` for gas, `'l'` for liquid)
+- `phase::AbstractChar='g'` - specifies phase of `mixture` (`'g'` for gas, `'l'` for liquid)
 - `buffer::BrusilovskyEoSMixtureBuffer` - buffer for intermediate calculations
 """
 function compressibility(
@@ -214,7 +217,7 @@ function compressibility(
     P,
     RT,
     phase::AbstractChar='g';
-    buf = NamedTuple()
+    buf = NamedTuple(),
 )
 
     phase in ('g', 'l') || throw(DomainError(repr(phase), "Phase must be 'g' or 'l'"))
@@ -230,7 +233,7 @@ function compressibility(
         1.0,
         cm + dm - bm - 1.0,
         am - bm * cm + cm * dm - bm * dm - dm - cm,
-        -bm * cm * dm - cm * dm - am * bm
+        -bm * cm * dm - cm * dm - am * bm,
     )
 
     if phase == 'g'

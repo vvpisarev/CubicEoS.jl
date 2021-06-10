@@ -9,8 +9,8 @@ Return `BrusilovskyEoSComponent` named `name` with parameters from `component_db
 - the first argument is `BrusilovskyEoSComponent`
 
 # Keywords
-- name::AbstractString: the component name
-- component_dbs: an iterable of `ComponentDatabase` objects (by default,
+- `name::AbstractString`: the component name
+- `component_dbs`: an iterable of `ComponentDatabase` objects (by default,
 (Data.martinez(), Data.brusilovsky_comp()))
 
 # Returns
@@ -115,7 +115,7 @@ function __load_brusilovsky_comp__(
 end
 
 """
-    load(BrusilovskyEoSMixture; name::AbstractString[, component_dbs])
+    load(BrusilovskyEoSMixture; names[, component_dbs])
 
 Return `BrusilovskyEoSMixture` by loading parameters for individual substances named `names`
 from `component_dbs` and their interaction parameters from `mix_eos_db`.
@@ -124,10 +124,10 @@ from `component_dbs` and their interaction parameters from `mix_eos_db`.
 - the first argument is `BrusilovskyEoSMixture`
 
 # Keywords
-- names::AbstractString: the names of components to load
-- component_dbs: an iterable of `ComponentDatabase` objects (by default,
+- `names`: an iterable of `AbstractString`s containing the names of components to load
+- `component_dbs`: an iterable of `ComponentDatabase` objects (by default,
 `(Data.martinez(), Data.brusilovsky_comp())`)
-- mix_eos_db::MixtureDatabase: the database with the cross-component interaction
+- `mix_eos_db::MixtureDatabase`: the database with the cross-component interaction
 parameters (by default, `Data.brusilovsky_mix()`)
 
 # Returns

@@ -40,7 +40,7 @@ function VTStabilityBuffer(mix::BrusilovskyEoSMixture)
         bi = bi,
         nmol_test = nmol_test,
         jacobian = jacobian,
-        thermo_buf = thermo_buf
+        thermo_buf = thermo_buf,
     )
     return VTStabilityBuffer(solver_buffer)
 end
@@ -49,10 +49,10 @@ function VTStabilityBuffer(
     thermo_buf::BrusilovskyThermoBuffer
 )
     loga_parent = similar(thermo_buf.vec1)
-    loga_test = similar(log_a_parent)
-    p_sat = similar(log_a_parent)
-    bi = similar(log_a_parent)
-    nmol_test = similar(log_a_parent)
+    loga_test = similar(loga_parent)
+    p_sat = similar(loga_parent)
+    bi = similar(loga_parent)
+    nmol_test = similar(loga_parent)
     jacobian = similar(thermo_buf.matr)
 
     solver_buffer = (
@@ -63,11 +63,20 @@ function VTStabilityBuffer(
         bi = bi,
         nmol_test = nmol_test,
         jacobian = jacobian,
-        thermo_buf = thermo_buf
+        thermo_buf = thermo_buf,
     )
     return VTStabilityBuffer(solver_buffer)
 end
 
+"""
+    vt_stability_buffer(mix)
+
+Create a buffer for intermediate calculations of one-phase stability of a mixture.
+
+For more info see ?vt_stability(mixture).
+
+See also: [`vt_stability`](@ref), [`thermo_buffer`](@ref)
+"""
 vt_stability_buffer(x) = VTStabilityBuffer(x)
 
 """
@@ -122,7 +131,7 @@ function vt_stability(
     nmol::AbstractVector,
     volume,
     RT;
-    vtstab_buf::VTStabilityBuffer = VTStabilityBuffer(mix)
+    vtstab_buf::VTStabilityBuffer = VTStabilityBuffer(mix),
 ) where {T}
 
     nc = length(mix)
@@ -143,7 +152,7 @@ function vt_stability(
 
     comp = components(mix)
     map!(subst -> subst.b, bi, comp)
-    map!(subst -> wilson_saturation_pressure(subst, RT), p_sat, comp)
+    p_sat .= wilson_saturation_pressure.(comp, RT)
     function stabilitytest!(nmol_test, grad)
         log_c_activity!(grad, mix, nmol_test, 1, RT; buf = thermo_buf)
         p_test = pressure(mix, nmol_test, 1, RT; buf = thermo_buf)
@@ -176,7 +185,7 @@ function vt_stability(
             nmol_test,
             1,
             RT;
-            buf = thermo_buf
+            buf = thermo_buf,
         )
         for i in 1:nc
             jacobian[i,i] += 1 / nmol_test[i]
@@ -187,7 +196,7 @@ function vt_stability(
             nmol_test,
             loga_test,
             stabilitytest!,
-            stability_step
+            stability_step,
         )
     end
 

@@ -8,7 +8,6 @@ c1c5mix = load(
     component_dbs = (Data.martinez(), Data.brusilovsky_comp()),
     mix_eos_db = Data.brusilovsky_mix()
 )
-c1c5_chem_mix = CubicEoS.ChemPotentialMixture(c1c5mix)
 
 """
 Prints (Ση, T)-diagram (variables used in (Mikyska, 2012)) of single phase stability region.

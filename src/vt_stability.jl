@@ -96,7 +96,6 @@ function vt_stability_optim_try!(
     Dfunc!::Function,  # функция D вида D!(η', ∇D_) -> D::Number
     maxstep::Function,
 )
-
     is_converged = false
 
     try
@@ -109,20 +108,12 @@ function vt_stability_optim_try!(
             constrain_step=maxstep,
             reset=false
         )
-        η_ .= result.argument
-
-        # is_converged = true
         is_converged = result.converged
     catch e
         @warn e
         is_converged = false
     end
-
-    #if is_converged
-        D_min, _ = Dfunc!(η_, grad_) # current_grad взят, чтобы не аллоцировать
-    #else
-    #    D_min = NaN
-    #end
+    D_min, _ = Dfunc!(optmethod.x, grad_)
     return D_min
 end
 

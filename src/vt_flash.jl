@@ -23,12 +23,16 @@ function vt_flash_closures(
     volume::Real,
     RT::Real,
 ) where {T}
-    nc = ncomponents(mix)
     N₁ = Vector{T}(undef, ncomponents(mix))
     N₂ = Vector{T}(undef, ncomponents(mix))
     log_Φ₁ = Vector{T}(undef, ncomponents(mix))
     log_Φ₂ = Vector{T}(undef, ncomponents(mix))
+
+    # calculates once
     Σnmol = sum(nmol)
+    Pbase = pressure(mix, nmol, volume, RT)
+    log_Φbase = Vector{T}(undef, ncomponents(mix))
+    log_c_activity!(log_Φbase, mix, nmol, volume, RT)
 
     function constrain_step(state, dir) end
     function helmholtz_diff_grad!(state::AbstractVector{T}, grad_::AbstractVector{T})
@@ -53,12 +57,29 @@ function vt_flash_closures(
         end
         P₁ = pressure(mix, N₁, V₁, RT)
         P₂ = pressure(mix, N₂, V₂, RT)
-        grad_[nc+1] = -P₁ + P₂
+        grad_[end] = -P₁ + P₂
         return grad_
     end
     function helmholtz_diff!(state::AbstractVector{T}, grad_::AbstractVector{T})
-        # ΔA = NaN
-        # return ΔA
+        helmholtz_diff_grad!(state, grad_)  # overwrites gradient `grad_`
+
+        N₂ .= nmol .- (sum(nmol) .* @view state[1:end-1])
+        V₂ = volume * (1 - state[end])
+        log_c_activity!(log_Φ₂, mix, N₂, V₂, RT)
+
+        "Σ Nᵢ (μᵢ - μ₂ᵢ)"
+        Ndotμ₂ = zero(T)
+        @inbounds for i in 1:length(state)-1
+            # μ base - μ₂
+            χ, S = nmol[i] / Σnmol, 1
+            χ₂, S₂ = 1 .- state[i], 1 - state[end]
+            Δμ = -RT * (log((χ₂/S₂)/(χ/S)) + (log_Φbase[i] - log_Φ₂[i]))
+            Ndotμ₂ += nmol[i] * Δμ
+        end
+
+        P₂ = pressure(mix, N₂, V₂, RT)
+        ΔA = dot(grad_, state) + (Pbase - P₂) * volume - Ndotμ₂
+        return ΔA, grad_
     end
     return constrain_step, helmholtz_diff_grad!, helmholtz_diff!
 end
@@ -85,10 +106,27 @@ function vt_flash(
 
     # two-phase state case
     # create closures for helmoltz energy, its gradient and constrain step
+    constrain_step, helmholtz_diff_grad!, helmholtz_diff! = vt_flash_closures(
+        mix, nmol, volume, RT
+    )
 
     # find initial vector for optimizer
+    state = [(0.5*nmol / sum(nmol))..., 0.46]
 
     # run optimizer
+    optmethod = DescentMethods.CholBFGS(state)
+    result = DescentMethods.optimize!(
+        optmethod,
+        helmholtz_diff!,
+        state,
+        gtol=1e-3,
+        maxiter=1000,
+        # constrain_step=constrain_step,
+        constrain_step=(x, d) -> 0.02,
+        reset=false,
+
+    )
+    println(result.x)
 
     # sort phases into foo_1 for gas, foo_2 for liquid
 

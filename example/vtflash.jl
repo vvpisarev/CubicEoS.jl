@@ -16,9 +16,7 @@ C₁C₅ = load(
 
 V = 1e-6
 N = (5e3 * V) .* [0.547413, 0.452587]
-RT = 440 * CubicEoS.GAS_CONSTANT_SI
+RT = 370 * CubicEoS.GAS_CONSTANT_SI
 
 state = vt_flash(C₁C₅, N, V, RT)
-println(state)
-println(state.nmol_1 == N)
-println(state.V_1 == V)
+dump(state)

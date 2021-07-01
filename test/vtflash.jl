@@ -21,11 +21,14 @@ RT = 370 * CubicEoS.GAS_CONSTANT_SI
 constrain_step, helmholtz_diff_grad, helmholtz_diff =
 maxstep, gradΔA!, ΔA! = CubicEoS.vt_flash_closures(C₁C₅, N, V, RT)
 
-for S₁ in 0.4:0.02:0.6
+for S₁ in 0.2:0.02:0.6
     xtest = [(0.5*N / sum(N))..., S₁]
     gradtest = similar(xtest)
-    gradΔA!(xtest, gradtest)
-    println(gradtest)
+    # gradΔA!(xtest, gradtest)
+    energy, gradtest = ΔA!(xtest, gradtest)
+    println("x = ", xtest)
+    println("∇A(x) = ", gradtest)
+    println("A(x) = ", energy)
 end
 
 # state = vt_flash(C₁C₅, N, V, RT)

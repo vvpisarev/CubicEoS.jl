@@ -85,4 +85,4 @@ function vt_stability_η_temp(fname::AbstractString, χ_base, Ση_range, T_rang
     end
 end
 
-vt_stability_η_temp("/tmp/c1c5_stability.txt", [0.547413, 0.452587], 100:10:15000, 300:1:450)
+vt_stability_η_temp([0.547413, 0.452587], 100:10:15000, 300:1:450)

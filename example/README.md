@@ -2,7 +2,7 @@
 
 Generating stability diagram
 
-```bash
+```console
 $ # from root dir of repo
 $ cd example
 $ julia --project=.. c1c5_vtstability_print.jl > /tmp/temp.tsv

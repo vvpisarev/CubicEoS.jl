@@ -28,13 +28,33 @@ function vt_flash_closures(
     log_Φ₁ = Vector{T}(undef, ncomponents(mix))
     log_Φ₂ = Vector{T}(undef, ncomponents(mix))
 
+    covolumes_b̃ = [(c.b for c in components(mix))..., -volume/sum(nmol)]
+
     # calculates once
     Σnmol = sum(nmol)
     Pbase = pressure(mix, nmol, volume, RT)
     log_Φbase = Vector{T}(undef, ncomponents(mix))
     log_c_activity!(log_Φbase, mix, nmol, volume, RT)
 
-    function constrain_step(state, dir) end
+    function constrain_step(state::AbstractVector{T}, dir::AbstractVector{T})
+        αm = convert(T, Inf)
+        # positiveness constrain
+        @inbounds for i in eachindex(state)
+            α = (1 - state[i]) / dir[i]
+            if 0 < α < αm
+                αm = α
+            elseif α < 0
+                @warn "constrain not meet for i = $i" state[i] dir[i] α
+            end
+        end
+        # covolume constrain
+        αm_covolume = - dot(state, covolumes_b̃) / dot(dir, covolumes_b̃)
+        if 0 < αm_covolume < αm
+            αm = αm_covolume
+        end
+        return αm
+    end
+
     function helmholtz_diff_grad!(state::AbstractVector{T}, grad_::AbstractVector{T})
         molfrac₁ = @view state[1:end-1]
         sat₁ = state[end]
@@ -113,18 +133,20 @@ function vt_flash(
     # find initial vector for optimizer
     state = [(0.5*nmol / sum(nmol))..., 0.46]
 
+    # initial hessian
+    hessian = 1e-5 * ones((length(state), length(state)))
+
     # run optimizer
     optmethod = DescentMethods.CholBFGS(state)
+    DescentMethods.reset!(optmethod, state, hessian)
     result = DescentMethods.optimize!(
         optmethod,
         helmholtz_diff!,
         state,
         gtol=1e-3,
         maxiter=1000,
-        # constrain_step=constrain_step,
-        constrain_step=(x, d) -> 0.02,
+        constrain_step=constrain_step,
         reset=false,
-
     )
     println(result.x)
 

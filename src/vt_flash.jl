@@ -177,7 +177,6 @@ function vt_flash(
         step_scale=0.5,
         helmholtz_thresh=-1e-5,
     )
-    dump(state)
 
     # initial hessian
     hessian = 1e-7 * ones((length(state), length(state)))
@@ -194,11 +193,22 @@ function vt_flash(
         constrain_step=constrain_step,
         reset=false,
     )
-    println(result.x)
+    # TODO: check convergence of BFGS
 
-    # sort phases into foo_1 for gas, foo_2 for liquid
+    # TODO: sort phases into foo_1 for gas, foo_2 for liquid
+    state .= result.x
+    nmol₁ = nmol .* @view state[1:end-1]
+    V₁ = volume * state[end]
+    nmol₂ = nmol .- nmol₁
+    V₂ = volume - V₁
 
-    # return result
-
-    return nothing
+    return VTFlashResult{T}(
+            converged=result.converged,
+            singlephase=false,
+            RT=RT,
+            nmol_1=nmol₁,
+            V_1=V₁,
+            nmol_2=nmol₂,
+            V_2=V₂
+    )
 end

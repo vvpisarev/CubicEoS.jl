@@ -104,6 +104,42 @@ function vt_flash_closures(
     return constrain_step, helmholtz_diff_grad!, helmholtz_diff!
 end
 
+function vt_flash_initial_state!(
+    state::AbstractVector{T},
+    conc₁::AbstractVector{T},
+    helmholtz_diff!::Function;
+    sat₁max::Real=T(0.5),
+    steps::Int=20,
+    step_scale::Real=T(0.5),
+    helmholtz_thresh::Real=T(-1e-5),  # must be negative value
+) where {T}
+    for i in 1:length(state)-1
+        state[i] = conc₁[i] / sum(conc₁)
+    end
+    state[end] = sat₁max
+
+    vec = similar(state)  # buffer vector for gradient
+    scale = 1
+    for i in 1:steps
+        # upd `state`
+        state[end] *= scale
+        # TODO: check if state feasible
+
+        # calc helmholtz energy
+        ΔA, _ = helmholtz_diff!(state, vec)
+        # check convergence
+        @debug i state=repr(state) scale ΔA helmholtz_thresh
+        if ΔA < helmholtz_thresh
+            return state
+        end
+
+        # update `scale`
+        scale *= step_scale
+    end
+    error("vt_flash_initial_state: state not found")
+    return nothing
+end
+
 function vt_flash(
     mix::BrusilovskyEoSMixture{T},
     nmol::AbstractVector,
@@ -131,10 +167,20 @@ function vt_flash(
     )
 
     # find initial vector for optimizer
-    state = [(0.5*nmol / sum(nmol))..., 0.46]
+    state = Vector{T}(undef, ncomponents(mix) + 1)
+    vt_flash_initial_state!(
+        state,
+        η_base,
+        helmholtz_diff!;
+        sat₁max=0.9,
+        steps=20,
+        step_scale=0.5,
+        helmholtz_thresh=-1e-5,
+    )
+    dump(state)
 
     # initial hessian
-    hessian = 1e-5 * ones((length(state), length(state)))
+    hessian = 1e-7 * ones((length(state), length(state)))
 
     # run optimizer
     optmethod = DescentMethods.CholBFGS(state)

@@ -15,8 +15,23 @@ C₁C₅ = load(
 # T = 440 Kelvins at 5 kmol m⁻³ should correspond to single-phase
 
 V = 1e-6
-N = (5e3 * V) .* [0.547413, 0.452587]
-RT = 370 * CubicEoS.GAS_CONSTANT_SI
+χ = [0.547413, 0.452587]
 
-state = vt_flash(C₁C₅, N, V, RT)
-dump(state)
+for T in 300:1:450
+    for Ση in 100:10:15000
+        RT = T * CubicEoS.GAS_CONSTANT_SI
+        N = (Ση * V) .* χ
+        converged = false
+        singlephase = false
+        try
+            state = vt_flash(C₁C₅, N, V, RT)
+            converged = state.converged
+            singlephase = state.singlephase
+        catch e
+            @warn "VTFlash not converged" T Ση e
+        end
+        print(join([T, Ση], '\t'))
+        print('\t', join([converged, singlephase], '\t'))
+        println()
+    end
+end

@@ -1,7 +1,5 @@
 #=
 VT-flash algorithm
-
-state assumed to be [molar fractions of phase 1, saturation of phase 1]
 =#
 
 struct VTFlashResult{T}
@@ -28,77 +26,89 @@ function vt_flash_closures(
     log_Φ₁ = Vector{T}(undef, ncomponents(mix))
     log_Φ₂ = Vector{T}(undef, ncomponents(mix))
 
-    covolumes_b̃ = [(c.b for c in components(mix))..., -volume/sum(nmol)]
-
     # calculates once
     Σnmol = sum(nmol)
     Pbase = pressure(mix, nmol, volume, RT)
     log_Φbase = Vector{T}(undef, ncomponents(mix))
     log_c_activity!(log_Φbase, mix, nmol, volume, RT)
 
+    "Constant vector for covolume constrain. [Nᵢbᵢ..., -V]"
+    covolumes_b̃ = [(c.b for c in components(mix))..., 1]
+    covolumes_b̃[1:end-1] .*= nmol
+    covolumes_b̃[end] *= -volume
+
+    "Updates `N₁`, `N₂`. Returns `state_tr`, `V₁`, `V₂` from `state`."
+    function transform(state::AbstractVector{T})
+        Tr = Diagonal([nmol..., volume])
+        state_tr = Tr * state
+        N₁ .= state_tr[1:end-1]
+        N₂ .= nmol .- N₁
+        V₁ = state_tr[end]
+        V₂ = volume - V₁
+        return state_tr, V₁, V₂
+    end
+
     function constrain_step(state::AbstractVector{T}, dir::AbstractVector{T})
         αm = convert(T, Inf)
-        # positiveness constrain
+        # # positiveness constrain (`0 < state[i] + α * dir[i] < 1`)
         @inbounds for i in eachindex(state)
-            α = (1 - state[i]) / dir[i]
+            if dir[i] > 0
+                α = (1 - state[i]) / dir[i]
+            elseif dir[i] < 0
+                α = - state[i] / dir[i]
+            end
             if 0 < α < αm
                 αm = α
             elseif α < 0
                 @warn "constrain not meet for i = $i" state[i] dir[i] α
             end
         end
+
         # covolume constrain
         αm_covolume = - dot(state, covolumes_b̃) / dot(dir, covolumes_b̃)
         if 0 < αm_covolume < αm
             αm = αm_covolume
         end
-        return αm
+        if αm == Inf
+            error("VTFlash: constrain_step. Step was not found.")
+        end
+        return 0.9 * αm
     end
 
     function helmholtz_diff_grad!(state::AbstractVector{T}, grad_::AbstractVector{T})
-        molfrac₁ = @view state[1:end-1]
-        sat₁ = state[end]
-
-        # log_Φ₁
-        N₁ .= Σnmol .* molfrac₁
-        V₁ = volume * sat₁
+        _, V₁, V₂ = transform(state)
         log_c_activity!(log_Φ₁, mix, N₁, V₁, RT)
-        # log_Φ₂
-        N₂ .= nmol .- N₁
-        V₂ = volume - V₁
         log_c_activity!(log_Φ₂, mix, N₂, V₂, RT)
 
-        @inbounds for i in eachindex(molfrac₁)
-            χ₁, S₁ = molfrac₁[i], sat₁
-            χ₂, S₂ = 1 - χ₁, 1 - sat₁
-            # (χ₂/S₂)/(χ₁/S₁) ≡ (N₂/V₂) / (N₁/V₁)
-            Δμ = -RT * (log((χ₂/S₂)/(χ₁/S₁)) + (log_Φ₁[i] - log_Φ₂[i]))
-            grad_[i] = Δμ
+        @inbounds for i in 1:length(state)-1
+            Δμ = -RT * (log((N₂[i]/V₂) / (N₁[i]/V₁)) + (log_Φ₁[i] - log_Φ₂[i]))
+            grad_[i] =  nmol[i] * Δμ  # TODO: changes when molfrac₁[i] is N'ᵢ / Nᵢ
         end
         P₁ = pressure(mix, N₁, V₁, RT)
         P₂ = pressure(mix, N₂, V₂, RT)
-        grad_[end] = -P₁ + P₂
+        grad_[end] = volume * (-P₁ + P₂)  # TODO: changes for state[i] = V'ᵢ / V
         return grad_
     end
     function helmholtz_diff!(state::AbstractVector{T}, grad_::AbstractVector{T})
-        helmholtz_diff_grad!(state, grad_)  # overwrites gradient `grad_`
+        _, V₁, V₂ = transform(state)
 
-        N₂ .= nmol .- (sum(nmol) .* @view state[1:end-1])
-        V₂ = volume * (1 - state[end])
+        # @debug "helmholtz_diff!" state=repr(state) N=repr(nmol) V=volume N₁=repr(N₁) V₁ N₂=repr(N₂) V₂
+        # @debug "helmholtz_diff!: constrains" dot(N₁, covolumes_b̃[1:end-1]./nmol) dot(N₂, covolumes_b̃[1:end-1]./nmol)
+
         log_c_activity!(log_Φ₂, mix, N₂, V₂, RT)
 
         "Σ Nᵢ (μᵢ - μ₂ᵢ)"
         Ndotμ₂ = zero(T)
         @inbounds for i in 1:length(state)-1
             # μ base - μ₂
-            χ, S = nmol[i] / Σnmol, 1
-            χ₂, S₂ = 1 .- state[i], 1 - state[end]
-            Δμ = -RT * (log((χ₂/S₂)/(χ/S)) + (log_Φbase[i] - log_Φ₂[i]))
+            Δμ = -RT * (log((N₂[i]/V₂)/(nmol[i]/volume)) + (log_Φbase[i] - log_Φ₂[i]))
             Ndotμ₂ += nmol[i] * Δμ
         end
 
         P₂ = pressure(mix, N₂, V₂, RT)
+        helmholtz_diff_grad!(state, grad_)  # overwrites gradient `grad_`
         ΔA = dot(grad_, state) + (Pbase - P₂) * volume - Ndotμ₂
+        @debug "helmholtz_diff!" state=repr(state) ΔA grad_ΔA=repr(grad_)
         return ΔA, grad_
     end
     return constrain_step, helmholtz_diff_grad!, helmholtz_diff!
@@ -106,38 +116,43 @@ end
 
 function vt_flash_initial_state!(
     state::AbstractVector{T},
+    nmol::AbstractVector{T},
+    volume::Real,
     conc₁::AbstractVector{T},
-    helmholtz_diff!::Function;
+    helmholtz_diff!::Function,
+    constrain_step::Function;
     sat₁max::Real=T(0.5),
     steps::Int=20,
     step_scale::Real=T(0.5),
     helmholtz_thresh::Real=T(-1e-5),  # must be negative value
 ) where {T}
-    for i in 1:length(state)-1
-        state[i] = conc₁[i] / sum(conc₁)
-    end
+    state[1:end-1] .= conc₁ * (sat₁max * volume) ./ nmol
     state[end] = sat₁max
 
     vec = similar(state)  # buffer vector for gradient
-    scale = 1
+    scale = one(T)
+    # scale = 0.9 * constrain_step(state, -1 * ones(length(state)))
+    @debug "Initial state search" start_scale=scale sat₁max
     for i in 1:steps
         # upd `state`
-        state[end] *= scale
+        sat = state[end] * scale
+        state[1:end-1] .= conc₁ * (sat * volume) ./ nmol
+        state[end] = sat
         # TODO: check if state feasible
 
         # calc helmholtz energy
+        @debug "Initial state search" i state=repr(state) scale
         ΔA, _ = helmholtz_diff!(state, vec)
         # check convergence
-        @debug i state=repr(state) scale ΔA helmholtz_thresh
+        @debug "Initial state search: ΔA calculated" i ΔA helmholtz_thresh
         if ΔA < helmholtz_thresh
-            return state
+            return true
         end
 
         # update `scale`
         scale *= step_scale
     end
-    error("vt_flash_initial_state: state not found")
-    return nothing
+    return false
 end
 
 function vt_flash(
@@ -147,7 +162,9 @@ function vt_flash(
     RT::Real,
 ) where {T}
     # run vt-stability to find out whether a state single phase or not
-    singlephase, η_base = vt_stability(mix, nmol, volume, RT)
+    singlephase, η₁test = vt_stability(mix, nmol, volume, RT)
+    @debug "VTFlash: VTStability result" singlephase η₁test=repr(η₁test)
+
     if singlephase
         return VTFlashResult{T}(
             converged=true,
@@ -168,18 +185,27 @@ function vt_flash(
 
     # find initial vector for optimizer
     state = Vector{T}(undef, ncomponents(mix) + 1)
-    vt_flash_initial_state!(
+    init_found = vt_flash_initial_state!(
         state,
-        η_base,
-        helmholtz_diff!;
-        sat₁max=0.9,
+        nmol,
+        volume,
+        η₁test,
+        helmholtz_diff!,
+        constrain_step;
+        sat₁max=0.1,
         steps=20,
         step_scale=0.5,
         helmholtz_thresh=-1e-5,
     )
 
+    @debug "VTFlash: initial state search result" found=init_found state=repr(state) ΔA=helmholtz_diff!(state, similar(state))
+
+    if !init_found
+        error("VTFlash: Initial state was not found!")
+    end
+
     # initial hessian
-    hessian = 1e-7 * ones((length(state), length(state)))
+    hessian = 1e-8 * ones((length(state), length(state)))
 
     # run optimizer
     optmethod = DescentMethods.CholBFGS(state)
@@ -189,7 +215,7 @@ function vt_flash(
         helmholtz_diff!,
         state,
         gtol=1e-3,
-        maxiter=1000,
+        maxiter=50,
         constrain_step=constrain_step,
         reset=false,
     )

@@ -82,11 +82,11 @@ function vt_flash_closures(
 
         @inbounds for i in 1:length(state)-1
             Δμ = -RT * (log((N₂[i]/V₂) / (N₁[i]/V₁)) + (log_Φ₁[i] - log_Φ₂[i]))
-            grad_[i] =  nmol[i] * Δμ  # TODO: changes when molfrac₁[i] is N'ᵢ / Nᵢ
+            grad_[i] =  nmol[i] * Δμ
         end
         P₁ = pressure(mix, N₁, V₁, RT)
         P₂ = pressure(mix, N₂, V₂, RT)
-        grad_[end] = volume * (-P₁ + P₂)  # TODO: changes for state[i] = V'ᵢ / V
+        grad_[end] = volume * (-P₁ + P₂)
         return grad_
     end
     function helmholtz_diff!(state::AbstractVector{T}, grad_::AbstractVector{T})
@@ -135,7 +135,7 @@ function vt_flash_initial_state!(
     @debug "Initial state search" start_scale=scale sat₁max
     for i in 1:steps
         # upd `state`
-        sat = state[end] * scale
+        sat = sat₁max * scale
         state[1:end-1] .= conc₁ * (sat * volume) ./ nmol
         state[end] = sat
         # TODO: check if state feasible

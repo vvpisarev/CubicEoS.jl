@@ -83,7 +83,7 @@ struct VTStabilityResult{T}
     # converged::Bool  # for future
     isstable::Bool
     energy_density::T
-    concentration::AbstractVector{T}
+    concentration::Vector{T}
 
     function VTStabilityResult{T}(isstable::Bool, energy_density, concentration) where {T}
         return new{T}(isstable, energy_density, copy(concentration))

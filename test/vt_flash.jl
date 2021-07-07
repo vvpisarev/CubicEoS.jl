@@ -13,7 +13,6 @@ function vt_flash_helmoltz_diff_saturation(
     helmholtz_diff!::Function,
     satinit,
 )
-
     state = fill(NaN, ncomponents(mix) + 1)
     grad = similar(state)
 
@@ -68,7 +67,7 @@ C₁C₅ = load(
 # T = 370 Kelvins at 5 kmol m⁻³ should correspond to two-phase
 # T = 440 Kelvins at 5 kmol m⁻³ should correspond to single-phase
 
-V = 1#1e-6
+V = 1
 N = (5000 * V) .* [0.547413, 0.452587]
 RT = 350 * CubicEoS.GAS_CONSTANT_SI
 
@@ -76,9 +75,10 @@ RT = 350 * CubicEoS.GAS_CONSTANT_SI
 constrain_step, helmholtz_diff_grad!, helmholtz_diff! = CubicEoS.vt_flash_closures(C₁C₅, N, V, RT)
 
 # vtstability
-issinglephase, conc₁ = vt_stability(C₁C₅, N, V, RT)
-println(stderr, "Is single phase: ", issinglephase)
-println(stderr, "Concentration from vt_stability ", conc₁)
+# issinglephase, vt_stab_tries = vt_stability(C₁C₅, N, V, RT)
+# conc₁ = CubicEoS.__vt_flash_init_conc_choose(vt_stab_tries)
+# println(stderr, "Is single phase: ", issinglephase)
+# println(stderr, "Concentration from vt_stability ", conc₁)
 
 # initial state debug
 # state = fill(NaN, ncomponents(C₁C₅) + 1)
@@ -96,16 +96,20 @@ println(stderr, "Concentration from vt_stability ", conc₁)
 # )
 
 # ΔA from saturation and initial concentration
-vt_flash_helmoltz_diff_saturation(
-    ;
-    mix=C₁C₅,
-    nmol=N,
-    volume=V,
-    RT=RT,
-    conc₁=conc₁,
-    helmholtz_diff! = helmholtz_diff!,
-    satinit=1,
-)
+# vt_flash_helmoltz_diff_saturation(
+#     ;
+#     mix=C₁C₅,
+#     nmol=N,
+#     volume=V,
+#     RT=RT,
+#     conc₁=conc₁,
+#     helmholtz_diff! = helmholtz_diff!,
+#     satinit=1,
+# )
+
+∇P = fill(NaN, ncomponents(C₁C₅) + 1)
+CubicEoS.__vt_flash_pressure_gradient!(∇P, C₁C₅, N, V, RT)
+dump(∇P)
 
 # state = vt_flash(C₁C₅, N, V, RT)
 # dump(state)

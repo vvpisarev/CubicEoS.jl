@@ -15,6 +15,20 @@ end
 VTFlashResult{T}(; converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2) where {T} =
 VTFlashResult{T}(converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2)
 
+"Return concentration of state with minimum energy from vt-stability tries."
+function __vt_flash_init_conc_choose(
+    vt_stab_tries::AbstractVector{VTStabilityResult{T}},
+) where {T}
+    Dmin = T(Inf)
+    index_min = -1
+    for (i, state) in enumerate(vt_stab_tries)
+        if !state.isstable && state.energy_density < Dmin
+            index_min = i
+        end
+    end
+    return vt_stab_tries[index_min].concentration
+end
+
 function vt_flash_closures(
     mix::BrusilovskyEoSMixture{T},
     nmol::AbstractVector,
@@ -162,8 +176,8 @@ function vt_flash(
     RT::Real,
 ) where {T}
     # run vt-stability to find out whether a state single phase or not
-    singlephase, η₁test = vt_stability(mix, nmol, volume, RT)
-    @debug "VTFlash: VTStability result" singlephase η₁test=repr(η₁test)
+    singlephase, vt_stab_tries = vt_stability(mix, nmol, volume, RT)
+    @debug "VTFlash: VTStability result" singlephase
 
     if singlephase
         return VTFlashResult{T}(
@@ -185,6 +199,8 @@ function vt_flash(
 
     # find initial vector for optimizer
     state = Vector{T}(undef, ncomponents(mix) + 1)
+    η₁test = __vt_flash_init_conc_choose(vt_stab_tries)
+
     init_found = vt_flash_initial_state!(
         state,
         nmol,
@@ -215,7 +231,7 @@ function vt_flash(
         helmholtz_diff!,
         state,
         gtol=1e-3,
-        maxiter=50,
+        maxiter=100,
         constrain_step=constrain_step,
         reset=false,
     )

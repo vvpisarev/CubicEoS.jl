@@ -20,3 +20,5 @@ RT = 300 * CubicEoS.GAS_CONSTANT_SI
 
 issinglephase, tries = vt_stability(C₁C₅, N, V, RT)
 dump(tries)
+
+dump(CubicEoS.__vt_flash_init_conc_choose(tries))

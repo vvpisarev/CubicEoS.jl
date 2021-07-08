@@ -75,7 +75,10 @@ function __vt_flash_pressure_gradient!(
     return nothing
 end
 
-"Calculates hessian for VTFlash."
+"""
+Calculates hessian for VTFlash from `state` and base `nmol`, `volume`.
+The `state` must be [N₁'/N₁, ..., Nₙ'/Nₙ, V'/V] vector.
+"""
 function __vt_flash_hessian!(
     hess::AbstractMatrix{T},
     state::AbstractVector{T},
@@ -311,13 +314,8 @@ function vt_flash(
     η₁test = __vt_flash_init_conc_choose(vt_stab_tries)
 
     init_found = vt_flash_initial_state!(
-        state,
-        nmol,
-        volume,
-        η₁test,
-        helmholtz_diff!,
-        constrain_step;
-        sat₁max=0.1,
+        state, nmol, volume, η₁test, helmholtz_diff!, constrain_step;
+        sat₁max=0.3,
         steps=20,
         step_scale=0.5,
         helmholtz_thresh=-1e-5,
@@ -330,7 +328,9 @@ function vt_flash(
     end
 
     # initial hessian
-    hessian = 1e-8 * ones((length(state), length(state)))
+    # hessian = 1e-8 * ones((length(state), length(state)))
+    hessian = Matrix{T}(undef, (length(state), length(state)))
+    __vt_flash_hessian!(hessian, state, mix, nmol, volume, RT)
 
     # run optimizer
     optmethod = DescentMethods.CholBFGS(state)
@@ -340,14 +340,14 @@ function vt_flash(
         helmholtz_diff!,
         state,
         gtol=1e-3,
-        maxiter=100,
+        maxiter=1000,
         constrain_step=constrain_step,
         reset=false,
     )
     # TODO: check convergence of BFGS
 
     # TODO: sort phases into foo_1 for gas, foo_2 for liquid
-    state .= result.x
+    state .= result.argument
     nmol₁ = nmol .* @view state[1:end-1]
     V₁ = volume * state[end]
     nmol₂ = nmol .- nmol₁

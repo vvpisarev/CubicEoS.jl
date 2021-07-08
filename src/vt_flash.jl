@@ -53,9 +53,9 @@ function __vt_flash_pressure_gradient!(
     VmB⁻¹ = 1 / (V - B)
     ΣnmolbyVmB² = sum(nmol) * VmB⁻¹^2
     DmC = D - C
-    VpC⁻¹ = 1 / (V + C)  # should be removed from localspace (used only as intermediate)
+    VpC⁻¹ = 1 / (V + C)
     VpC⁻² = VpC⁻¹^2
-    VpD⁻¹ = 1 / (V + D)  # should be removed from localspace (used only as intermediate)
+    VpD⁻¹ = 1 / (V + D)
     VpD⁻² = VpD⁻¹^2
     AbyDmC = A / DmC
     VpC⁻¹mVpD⁻¹byDmC² = (VpC⁻¹ - VpD⁻¹) / DmC^2
@@ -76,7 +76,67 @@ function __vt_flash_pressure_gradient!(
 end
 
 "Calculates hessian for VTFlash."
-function __vt_flash_hessian! end
+function __vt_flash_hessian!(
+    hess::AbstractMatrix{T},
+    state::AbstractVector{T},
+    mix::BrusilovskyEoSMixture{T},
+    nmol::AbstractVector,  # I-state
+    volume::Real,          # I-state
+    RT::Real,
+) where {T}
+    # TODO: make hessian symmetric for optimization
+
+    #     |    |   |   M   size
+    #     | 𝔹  | ℂ |   --------
+    # ℍ = |    |   |   𝔹   n×n
+    #     |----|---|   ℂ   n×1
+    #     | ℂᵀ | 𝔻 |   𝔻   1×1
+
+    #                 [ ∂lnΦᵢ           ∂lnΦᵢ           ]
+    # 𝔹ᵢⱼ = -RT Nᵢ Nⱼ [ -----(N', V') + -----(N'', V'') ]
+    #                 [  ∂Nⱼ             ∂Nⱼ            ]
+    N₁ = nmol .* state[1:end-1]
+    V₁ = volume * state[end]
+
+    𝔹 = @view hess[1:end-1,1:end-1]
+    ∇P = similar(state)  # (n + 1) size
+    ∇P⁻ = @view ∇P[1:end-1]  # n size
+    # ∇P⁻ used as buffer
+    log_c_activity_wj!(∇P⁻, 𝔹, mix, N₁, V₁, RT)  # 𝔹 = jacobian'
+
+    N₂ = nmol .- N₁
+    V₂ = volume - V₁
+    jacobian₂ = Matrix{T}(undef, size(𝔹))
+    # ∇P⁻ used as buffer
+    log_c_activity_wj!(∇P⁻, jacobian₂, mix, N₂, V₂, RT)
+
+    𝔹 .+= jacobian₂  # 𝔹 = jacobian' + jacobian''
+    𝔹 .*= -RT * (nmol * nmol')  # final 𝔹
+
+    #            [ ∂P             ∂P             ]
+    # ℂᵢ = -V Nᵢ [ --- (N', V') + --- (N'', V'') ]
+    #            [ ∂Nᵢ            ∂Nᵢ            ]
+    #
+    #         [ ∂P            ∂P            ]
+    # 𝔻 = -V² [ -- (N', V') + -- (N'', V'') ]
+    #         [ ∂V            ∂V            ]
+    __vt_flash_pressure_gradient!(∇P, mix, N₁, V₁, RT)
+    ℂ = @view hess[1:end-1, end]
+    ℂ .= @view ∇P[1:end-1]  # ℂ = (∂P/∂Nᵢ)'
+    𝔻 = ∇P[end]  # 𝔻 = (∂P/∂V)'
+
+    __vt_flash_pressure_gradient!(∇P, mix, N₂, V₂, RT)
+    ℂ .+= @view ∇P[1:end-1]  # ℂ = ∇P' + ∇P''
+    ℂ .*= -volume .* nmol  # final ℂ
+    # seems like can be replaced hess[end, :] .= ℂ
+    # but version below seems tracking math for me
+    hess[[end], 1:end-1] .= ℂ'  # ℂᵀ part of hessian
+
+    𝔻 += ∇P[end]  # 𝔻 = (∂P/∂V)' + (∂P/∂V)''
+    𝔻 *= -volume^2  # final 𝔻
+    hess[end, end] = 𝔻
+    return nothing
+end
 
 function vt_flash_closures(
     mix::BrusilovskyEoSMixture{T},

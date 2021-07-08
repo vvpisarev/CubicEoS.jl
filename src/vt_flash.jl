@@ -265,11 +265,15 @@ function vt_flash_initial_state!(
 
         # calc helmholtz energy
         @debug "Initial state search" i state=repr(state) scale
-        ΔA, _ = helmholtz_diff!(state, vec)
-        # check convergence
-        @debug "Initial state search: ΔA calculated" i ΔA helmholtz_thresh
-        if ΔA < helmholtz_thresh
-            return true
+        try
+            ΔA, _ = helmholtz_diff!(state, vec)
+            # check convergence
+            @debug "Initial state search: ΔA calculated" i ΔA helmholtz_thresh
+            if ΔA < helmholtz_thresh
+                return true
+            end
+        catch e
+            @warn "VTFlash: initial state search" sat e
         end
 
         # update `scale`

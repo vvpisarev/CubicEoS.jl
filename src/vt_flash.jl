@@ -201,25 +201,22 @@ function vt_flash_closures(
         return 0.9 * αm
     end
 
-    function helmholtz_diff_grad!(state::AbstractVector{T}, grad_::AbstractVector{T})
+    function helmholtz_diff_grad!(state::AbstractVector{T}, grad::AbstractVector{T})
         _, V₁, V₂ = transform(state)
         log_c_activity!(log_Φ₁, mix, N₁, V₁, RT)
         log_c_activity!(log_Φ₂, mix, N₂, V₂, RT)
 
         @inbounds for i in 1:length(state)-1
             Δμ = -RT * (log((N₂[i]/V₂) / (N₁[i]/V₁)) + (log_Φ₁[i] - log_Φ₂[i]))
-            grad_[i] =  nmol[i] * Δμ
+            grad[i] = nmol[i] * Δμ
         end
         P₁ = pressure(mix, N₁, V₁, RT)
         P₂ = pressure(mix, N₂, V₂, RT)
-        grad_[end] = volume * (-P₁ + P₂)
-        return grad_
+        grad[end] = volume * (-P₁ + P₂)
+        return grad
     end
-    function helmholtz_diff!(state::AbstractVector{T}, grad_::AbstractVector{T})
+    function helmholtz_diff!(state::AbstractVector{T}, grad::AbstractVector{T})
         _, V₁, V₂ = transform(state)
-
-        # @debug "helmholtz_diff!" state=repr(state) N=repr(nmol) V=volume N₁=repr(N₁) V₁ N₂=repr(N₂) V₂
-        # @debug "helmholtz_diff!: constrains" dot(N₁, covolumes_b̃[1:end-1]./nmol) dot(N₂, covolumes_b̃[1:end-1]./nmol)
 
         log_c_activity!(log_Φ₂, mix, N₂, V₂, RT)
 
@@ -232,10 +229,10 @@ function vt_flash_closures(
         end
 
         P₂ = pressure(mix, N₂, V₂, RT)
-        helmholtz_diff_grad!(state, grad_)  # overwrites gradient `grad_`
-        ΔA = dot(grad_, state) + (Pbase - P₂) * volume - Ndotμ₂
-        @debug "helmholtz_diff!" state=repr(state) ΔA grad_ΔA=repr(grad_)
-        return ΔA, grad_
+        helmholtz_diff_grad!(state, grad)  # overwrites gradient `grad`
+        ΔA = dot(grad, state) + (Pbase - P₂) * volume - Ndotμ₂
+        @debug "helmholtz_diff!" state=repr(state) ΔA grad=repr(grad) norm(grad, 2)
+        return ΔA, grad
     end
     return constrain_step, helmholtz_diff_grad!, helmholtz_diff!
 end

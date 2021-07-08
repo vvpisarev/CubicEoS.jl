@@ -54,11 +54,11 @@ function vt_flash_helmoltz_diff_saturation(
     return nothing
 end
 
-C₁C₅ = load(
-    BrusilovskyEoSMixture,
-    names = ("methane", "n-pentane"),
-    component_dbs = (Data.martinez(), Data.brusilovsky_comp()),
-    mix_eos_db = Data.brusilovsky_mix()
+mix = load(
+    BrusilovskyEoSMixture;
+    names=("methane", "n-pentane"),
+    component_dbs=(Data.martinez(), Data.brusilovsky_comp()),
+    mix_eos_db=Data.brusilovsky_mix()
 )
 
 # [0.547413, 0.452587] mole fractions from (Mikyska, 2013, Example 2)
@@ -72,33 +72,28 @@ N = (5000 * V) .* [0.547413, 0.452587]
 RT = 350 * CubicEoS.GAS_CONSTANT_SI
 
 # closures
-constrain_step, helmholtz_diff_grad!, helmholtz_diff! = CubicEoS.vt_flash_closures(C₁C₅, N, V, RT)
+constrain_step, helmholtz_diff_grad!, helmholtz_diff! = CubicEoS.vt_flash_closures(mix, N, V, RT)
 
 # vtstability
-# issinglephase, vt_stab_tries = vt_stability(C₁C₅, N, V, RT)
-# conc₁ = CubicEoS.__vt_flash_init_conc_choose(vt_stab_tries)
-# println(stderr, "Is single phase: ", issinglephase)
-# println(stderr, "Concentration from vt_stability ", conc₁)
+issinglephase, vt_stab_tries = vt_stability(mix, N, V, RT)
+conc₁ = CubicEoS.__vt_flash_init_conc_choose(vt_stab_tries)
+println(stderr, "Is single phase: ", issinglephase)
+println(stderr, "Concentration from vt_stability ", conc₁)
 
 # initial state debug
-# state = fill(NaN, ncomponents(C₁C₅) + 1)
-# CubicEoS.vt_flash_initial_state!(
-#     state,
-#     N,
-#     V,
-#     conc₁,
-#     helmholtz_diff!,
-#     constrain_step;
-#     sat₁max=0.5,
-#     steps=20,
-#     step_scale=0.8,
-#     helmholtz_thresh=-1e-5,
-# )
+state = fill(NaN, ncomponents(mix) + 1)
+CubicEoS.vt_flash_initial_state!(
+    state, N, V, conc₁, helmholtz_diff!, constrain_step;
+    sat₁max=0.1,
+    steps=20,
+    step_scale=0.8,
+    helmholtz_thresh=-1e-5,
+)
 
 # ΔA from saturation and initial concentration
 # vt_flash_helmoltz_diff_saturation(
 #     ;
-#     mix=C₁C₅,
+#     mix=mix,
 #     nmol=N,
 #     volume=V,
 #     RT=RT,
@@ -107,9 +102,14 @@ constrain_step, helmholtz_diff_grad!, helmholtz_diff! = CubicEoS.vt_flash_closur
 #     satinit=1,
 # )
 
-∇P = fill(NaN, ncomponents(C₁C₅) + 1)
-CubicEoS.__vt_flash_pressure_gradient!(∇P, C₁C₅, N, V, RT)
-dump(∇P)
+# ∇P = fill(NaN, ncomponents(mix) + 1)
+# CubicEoS.__vt_flash_pressure_gradient!(∇P, mix, N, V, RT)
+# dump(∇P)
 
-# state = vt_flash(C₁C₅, N, V, RT)
+ℍ = fill(NaN, (ncomponents(mix) + 1, ncomponents(mix) + 1))
+# state = fill(NaN, size(ℍ)[1])
+CubicEoS.__vt_flash_hessian!(ℍ, state, mix, N, V, RT)
+dump(ℍ)
+
+# state = vt_flash(mix, N, V, RT)
 # dump(state)

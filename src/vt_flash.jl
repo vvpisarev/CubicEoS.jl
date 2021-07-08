@@ -328,10 +328,13 @@ function vt_flash(
     # hessian = 1e-8 * ones((length(state), length(state)))
     hessian = Matrix{T}(undef, (length(state), length(state)))
     __vt_flash_hessian!(hessian, state, mix, nmol, volume, RT)
+    @debug "VTFlash: initial hessian found" isposdef(hessian)
 
     # run optimizer
     optmethod = DescentMethods.CholBFGS(state)
     DescentMethods.reset!(optmethod, state, hessian)
+    # optmethod = DescentMethods.BFGS(state)
+    # DescentMethods.reset!(optmethod, state, 2e-4)
     result = DescentMethods.optimize!(
         optmethod,
         helmholtz_diff!,

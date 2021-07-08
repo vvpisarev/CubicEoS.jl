@@ -101,7 +101,7 @@ function __vt_flash_hessian!(
     N₁ = nmol .* state[1:end-1]
     V₁ = volume * state[end]
 
-    𝔹 = @view hess[1:end-1,1:end-1]
+    𝔹 = @view hess[1:end-1, 1:end-1]
     ∇P = similar(state)  # (n + 1) size
     ∇P⁻ = @view ∇P[1:end-1]  # n size
     # ∇P⁻ used as buffer

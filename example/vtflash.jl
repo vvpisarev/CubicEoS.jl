@@ -17,8 +17,8 @@ C₁C₅ = load(
 V = 1e-6
 χ = [0.547413, 0.452587]
 
-for T in 300:1:450
-    for Ση in 100:10:15000
+for T in 300:10:450
+    for Ση in 100:100:15000
         RT = T * CubicEoS.GAS_CONSTANT_SI
         N = (Ση * V) .* χ
         converged = false

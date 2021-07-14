@@ -153,7 +153,7 @@ function vt_flash_closures(
     log_Φ₂ = Vector{T}(undef, ncomponents(mix))
 
     # calculates once
-    Σnmol = sum(nmol)
+    # Σnmol = sum(nmol)
     Pbase = pressure(mix, nmol, volume, RT)
     log_Φbase = Vector{T}(undef, ncomponents(mix))
     log_c_activity!(log_Φbase, mix, nmol, volume, RT)
@@ -192,8 +192,14 @@ function vt_flash_closures(
 
         # covolume constrain
         αm_covolume = - dot(state, covolumes_b̃) / dot(dir, covolumes_b̃)
-        if 0 < αm_covolume < αm
-            αm = αm_covolume
+        if dot(dir, covolumes_b̃) > 0
+            if 0 < αm_covolume < αm
+                αm = αm_covolume
+            end
+        else
+            if αm < αm_covolume
+                @warn "Covolume constrain not meet others"
+            end
         end
         if αm == Inf
             error("VTFlash: constrain_step. Step was not found.")

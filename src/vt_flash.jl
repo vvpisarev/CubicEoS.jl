@@ -114,7 +114,7 @@ function __vt_flash_hessian!(
     log_c_activity_wj!(∇P⁻, jacobian₂, mix, N₂, V₂, RT)
 
     𝔹 .+= jacobian₂  # 𝔹 = jacobian' + jacobian''
-    𝔹 .*= -RT * (nmol * nmol')  # final 𝔹
+    𝔹 .*= RT * (nmol * nmol')  # final 𝔹, the minus missed cuz of ln Φᵢ = -ln Cₐᵢ
 
     #            [ ∂P             ∂P             ]
     # ℂᵢ = -V Nᵢ [ --- (N', V') + --- (N'', V'') ]
@@ -157,6 +157,7 @@ function vt_flash_closures(
     Pbase = pressure(mix, nmol, volume, RT)
     log_Φbase = Vector{T}(undef, ncomponents(mix))
     log_c_activity!(log_Φbase, mix, nmol, volume, RT)
+    log_Φbase .*= -1
 
     "Constant vector for covolume constrain. [Nᵢbᵢ..., -V]"
     covolumes_b̃ = [(c.b for c in components(mix))..., 1]
@@ -211,6 +212,8 @@ function vt_flash_closures(
         _, V₁, V₂ = transform(state)
         log_c_activity!(log_Φ₁, mix, N₁, V₁, RT)
         log_c_activity!(log_Φ₂, mix, N₂, V₂, RT)
+        log_Φ₁ .*= -1
+        log_Φ₂ .*= -1
 
         @inbounds for i in 1:length(state)-1
             Δμ = -RT * (log((N₂[i]/V₂) / (N₁[i]/V₁)) + (log_Φ₁[i] - log_Φ₂[i]))
@@ -225,6 +228,7 @@ function vt_flash_closures(
         _, V₁, V₂ = transform(state)
 
         log_c_activity!(log_Φ₂, mix, N₂, V₂, RT)
+        log_Φ₂ .*= -1
 
         "Σ Nᵢ (μᵢ - μ₂ᵢ)"
         Ndotμ₂ = zero(T)

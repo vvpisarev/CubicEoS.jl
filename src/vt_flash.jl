@@ -10,6 +10,10 @@ struct VTFlashResult{T}
     V_1::T
     nmol_2::Vector{T}
     V_2::T
+
+    function VTFlashResult{T}(converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2) where {T}
+        return new{T}(converged, singlephase, RT, copy(nmol_1), V_1, copy(nmol_2), V_2)
+    end
 end
 
 VTFlashResult{T}(; converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2) where {T} =

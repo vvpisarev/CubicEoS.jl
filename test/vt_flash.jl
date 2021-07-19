@@ -100,20 +100,20 @@ mix = load(
 # T = 440 Kelvins at 5 kmol m⁻³ should correspond to single-phase
 
 V = 1e-6
-N = (7500 * V) .* [0.547413, 0.452587]
-RT = 350 * CubicEoS.GAS_CONSTANT_SI
+N = (9750 * V) .* [0.547413, 0.452587]
+RT = 302 * CubicEoS.GAS_CONSTANT_SI
 
 # closures
 constrain_step, helmholtz_diff_grad!, helmholtz_diff! = CubicEoS.vt_flash_closures(mix, N, V, RT)
 
 # vtstability
-# issinglephase, vt_stab_tries = vt_stability(mix, N, V, RT)
-# conc₁ = CubicEoS.__vt_flash_init_conc_choose(vt_stab_tries)
-# println(stderr, "Is single phase: ", issinglephase)
-# println(stderr, "Concentration from vt_stability ", conc₁)
-# for vttry in vt_stab_tries
-#     dump(vttry)
-# end
+issinglephase, vt_stab_tries = vt_stability(mix, N, V, RT)
+conc₁ = CubicEoS.__vt_flash_init_conc_choose(vt_stab_tries)
+println(stderr, "Is single phase: ", issinglephase)
+println(stderr, "Concentration from vt_stability ", conc₁)
+for vttry in vt_stab_tries
+    dump(vttry)
+end
 
 # initial state debug
 # state = fill(NaN, ncomponents(mix) + 1)

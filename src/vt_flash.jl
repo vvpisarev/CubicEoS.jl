@@ -323,7 +323,7 @@ function vt_flash(
         sat₁max=1.0,
         steps=20,
         step_scale=0.5,
-        helmholtz_thresh=-1e-5,
+        helmholtz_thresh=-1e-7,
     )
 
     @debug "VTFlash: initial state search result" found=init_found state=repr(state) ΔA=helmholtz_diff!(state, similar(state))

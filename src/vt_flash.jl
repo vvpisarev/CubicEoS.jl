@@ -259,7 +259,6 @@ function vt_flash_initial_state!(
 
     vec = similar(state)  # buffer vector for gradient
     scale = one(T)
-    # scale = 0.9 * constrain_step(state, -1 * ones(length(state)))
     @debug "Initial state search" start_scale=scale sat₁max
     for i in 1:steps
         # upd `state`
@@ -321,7 +320,7 @@ function vt_flash(
 
     init_found = vt_flash_initial_state!(
         state, nmol, volume, η₁test, helmholtz_diff!, constrain_step;
-        sat₁max=0.3,
+        sat₁max=1.0,
         steps=20,
         step_scale=0.5,
         helmholtz_thresh=-1e-5,
@@ -334,7 +333,6 @@ function vt_flash(
     end
 
     # initial hessian
-    # hessian = 1e-8 * ones((length(state), length(state)))
     hessian = Matrix{T}(undef, (length(state), length(state)))
     __vt_flash_hessian!(hessian, state, mix, nmol, volume, RT)
     @debug "VTFlash: initial hessian found" isposdef(hessian)
@@ -342,14 +340,12 @@ function vt_flash(
     # run optimizer
     optmethod = DescentMethods.CholBFGS(state)
     DescentMethods.reset!(optmethod, state, hessian)
-    # optmethod = DescentMethods.BFGS(state)
-    # DescentMethods.reset!(optmethod, state, 2e-4)
     result = DescentMethods.optimize!(
         optmethod,
         helmholtz_diff!,
         state,
         gtol=1e-3,
-        maxiter=1000,
+        maxiter=100,
         constrain_step=constrain_step,
         reset=false,
     )

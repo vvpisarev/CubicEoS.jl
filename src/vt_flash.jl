@@ -243,7 +243,7 @@ function vt_flash_closures(
     return constrain_step, helmholtz_diff_grad!, helmholtz_diff!
 end
 
-function vt_flash_initial_state!(
+function __vt_flash_initial_state!(
     state::AbstractVector{T},
     nmol::AbstractVector{T},
     volume::Real,
@@ -319,7 +319,7 @@ function vt_flash(
     state = Vector{T}(undef, ncomponents(mix) + 1)
     η₁test = __vt_flash_init_conc_choose(vt_stab_tries)
 
-    init_found = vt_flash_initial_state!(
+    init_found = __vt_flash_initial_state!(
         state, nmol, volume, η₁test, helmholtz_diff!, constrain_step;
         sat₁max=1.0,
         steps=20,

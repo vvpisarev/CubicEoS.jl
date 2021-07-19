@@ -24,6 +24,7 @@ function __vt_flash_init_conc_choose(
     for (i, state) in enumerate(vt_stab_tries)
         if !state.isstable && state.energy_density < Dmin
             index_min = i
+            Dmin = state.energy_density
         end
     end
     return vt_stab_tries[index_min].concentration

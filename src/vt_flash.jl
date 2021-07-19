@@ -149,15 +149,13 @@ function vt_flash_closures(
 ) where {T}
     N₁ = Vector{T}(undef, ncomponents(mix))
     N₂ = Vector{T}(undef, ncomponents(mix))
-    log_Φ₁ = Vector{T}(undef, ncomponents(mix))
-    log_Φ₂ = Vector{T}(undef, ncomponents(mix))
+    log_cₐ₁ = Vector{T}(undef, ncomponents(mix))
+    log_cₐ₂ = Vector{T}(undef, ncomponents(mix))
 
     # calculates once
-    # Σnmol = sum(nmol)
     Pbase = pressure(mix, nmol, volume, RT)
-    log_Φbase = Vector{T}(undef, ncomponents(mix))
-    log_c_activity!(log_Φbase, mix, nmol, volume, RT)
-    log_Φbase .*= -1
+    log_cₐ_base = Vector{T}(undef, ncomponents(mix))
+    log_c_activity!(log_cₐ_base, mix, nmol, volume, RT)
 
     "Constant vector for covolume constrain. [Nᵢbᵢ..., -V]"
     covolumes_b̃ = [(c.b for c in components(mix))..., 1]
@@ -210,13 +208,11 @@ function vt_flash_closures(
 
     function helmholtz_diff_grad!(state::AbstractVector{T}, grad::AbstractVector{T})
         _, V₁, V₂ = transform(state)
-        log_c_activity!(log_Φ₁, mix, N₁, V₁, RT)
-        log_c_activity!(log_Φ₂, mix, N₂, V₂, RT)
-        log_Φ₁ .*= -1
-        log_Φ₂ .*= -1
+        log_c_activity!(log_cₐ₁, mix, N₁, V₁, RT)
+        log_c_activity!(log_cₐ₂, mix, N₂, V₂, RT)
 
         @inbounds for i in 1:length(state)-1
-            Δμ = -RT * (log((N₂[i]/V₂) / (N₁[i]/V₁)) + (log_Φ₁[i] - log_Φ₂[i]))
+            Δμ = -RT * (log((N₂[i]/V₂) / (N₁[i]/V₁)) - (log_cₐ₁[i] - log_cₐ₂[i]))
             grad[i] = nmol[i] * Δμ
         end
         P₁ = pressure(mix, N₁, V₁, RT)
@@ -227,14 +223,13 @@ function vt_flash_closures(
     function helmholtz_diff!(state::AbstractVector{T}, grad::AbstractVector{T})
         _, V₁, V₂ = transform(state)
 
-        log_c_activity!(log_Φ₂, mix, N₂, V₂, RT)
-        log_Φ₂ .*= -1
+        log_c_activity!(log_cₐ₂, mix, N₂, V₂, RT)
 
         "Σ Nᵢ (μᵢ - μ₂ᵢ)"
         Ndotμ₂ = zero(T)
         @inbounds for i in 1:length(state)-1
             # μ base - μ₂
-            Δμ = -RT * (log((N₂[i]/V₂)/(nmol[i]/volume)) + (log_Φbase[i] - log_Φ₂[i]))
+            Δμ = -RT * (log((N₂[i]/V₂)/(nmol[i]/volume)) - (log_cₐ_base[i] - log_cₐ₂[i]))
             Ndotμ₂ += nmol[i] * Δμ
         end
 

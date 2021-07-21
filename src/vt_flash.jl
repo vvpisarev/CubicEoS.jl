@@ -291,6 +291,52 @@ function __vt_flash_initial_state!(
     return false
 end
 
+"""
+Extracts vt-state from `optresult` (DescentMethods obj).
+Sorts variables into gas and liquid.
+Returns corresponding `VTFlashResult`.
+"""
+function __vt_flash_two_phase_result(
+    mix::BrusilovskyEoSMixture{T},
+    nmol::AbstractVector{T},
+    volume::Real,
+    RT::Real,
+    optresult,
+) where {T}
+    # □₁ for gas, □₂ for liquid
+    state = optresult.argument
+    nmol₁ = nmol .* @view state[1:end-1]
+    V₁ = volume * state[end]
+    nmol₂ = nmol .- nmol₁
+    V₂ = volume - V₁
+
+    P₁ = pressure(mix, nmol₁, V₁, RT)  # they should be equal
+    P₂ = pressure(mix, nmol₂, V₂, RT)
+
+    Z₁ = P₁ * V₁ / (sum(nmol₁) * RT)  # seems can be reduced to Vᵢ / sum(nmolᵢ)
+    Z₂ = P₂ * V₂ / (sum(nmol₂) * RT)
+
+    if Z₂ > Z₁  # □₂ is gas state, need exchange
+        P₁, P₂ = P₂, P₁
+        Z₁, Z₂ = Z₂, Z₁
+        V₁, V₂ = V₂, V₁
+
+        for i in eachindex(nmol₁, nmol₂)
+            nmol₁[i], nmol₂[i] = nmol₂[i], nmol₁[i]
+        end
+    end
+
+    return VTFlashResult{T}(
+            converged=optresult.converged,
+            singlephase=false,
+            RT=RT,
+            nmol_1=nmol₁,
+            V_1=V₁,
+            nmol_2=nmol₂,
+            V_2=V₂
+    )
+end
+
 function vt_flash(
     mix::BrusilovskyEoSMixture{T},
     nmol::AbstractVector,
@@ -356,20 +402,5 @@ function vt_flash(
     )
     # TODO: check convergence of BFGS
 
-    # TODO: sort phases into foo_1 for gas, foo_2 for liquid
-    state .= result.argument
-    nmol₁ = nmol .* @view state[1:end-1]
-    V₁ = volume * state[end]
-    nmol₂ = nmol .- nmol₁
-    V₂ = volume - V₁
-
-    return VTFlashResult{T}(
-            converged=result.converged,
-            singlephase=false,
-            RT=RT,
-            nmol_1=nmol₁,
-            V_1=V₁,
-            nmol_2=nmol₂,
-            V_2=V₂
-    )
+    return __vt_flash_two_phase_result(mix, nmol, volume, RT, result)
 end

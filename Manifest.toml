@@ -14,8 +14,8 @@ uuid = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 
 [[DescentMethods]]
 deps = ["LinearAlgebra"]
-git-tree-sha1 = "93169c57a53a415c918a149b5339474fe5818409"
-repo-rev = "chol_bfgs"
+git-tree-sha1 = "69c17edf31fe4519283fb0c006cea54278a6d447"
+repo-rev = "master"
 repo-url = "https://github.com/vvpisarev/DescentMethods.jl"
 uuid = "f4becde8-b16e-4b5a-8f91-16ef0c22c8bc"
 version = "0.1.0"

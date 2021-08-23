@@ -371,8 +371,8 @@ function vt_flash(
 
     init_found = __vt_flash_initial_state!(
         state, nmol, volume, η₁test, helmholtz_diff!, constrain_step;
-        sat₁max=1.0,
-        steps=20,
+        sat₁max=0.25,
+        steps=200,
         step_scale=0.5,
         helmholtz_thresh=-1e-7,
     )
@@ -380,6 +380,7 @@ function vt_flash(
     @debug "VTFlash: initial state search result" found=init_found state=repr(state) ΔA=helmholtz_diff!(state, similar(state))
 
     if !init_found
+        @error "VTFlash: Initial state was not found!" mixture=mix nmol=repr(nmol) volume=volume RT=RT
         error("VTFlash: Initial state was not found!")
     end
 

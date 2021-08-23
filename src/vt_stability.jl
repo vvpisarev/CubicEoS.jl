@@ -79,6 +79,17 @@ See also: [`vt_stability`](@ref), [`thermo_buffer`](@ref)
 """
 vt_stability_buffer(x) = VTStabilityBuffer(x)
 
+struct VTStabilityResult{T}
+    # converged::Bool  # for future
+    isstable::Bool
+    energy_density::T
+    concentration::Vector{T}
+
+    function VTStabilityResult{T}(isstable::Bool, energy_density, concentration) where {T}
+        return new{T}(isstable, energy_density, copy(concentration))
+    end
+end
+
 """
 Оптимизационная процедура для алгоритма проверки стабильности.
 Минимизирует D(η').
@@ -192,6 +203,7 @@ function vt_stability(
     end
 
     optmethod = DescentMethods.CholBFGS(nmol)
+    results = Vector{VTStabilityResult{T}}(undef, 4)
 
     # Initial - gas
     p_init = dot(p_sat, nmol) / sum(nmol)
@@ -202,20 +214,14 @@ function vt_stability(
     nmol_test .*= p_init / (z_gg * RT * sum(nmol_test))
 
     D_gg = D_min(nmol_test, optmethod)
-
-    if D_gg < thresh
-        return false, optmethod.x
-    end
+    results[1] = VTStabilityResult{T}(D_gg ≥ thresh, D_gg, optmethod.x)
 
     # Test - liquid
     z_gl = compressibility(mix, nmol_test, p_init, RT, 'l')
     nmol_test .*= z_gg / z_gl
 
     D_gl = D_min(nmol_test, optmethod)
-
-    if D_gl < thresh
-        return false, optmethod.x
-    end
+    results[2] = VTStabilityResult{T}(D_gl ≥ thresh, D_gl, optmethod.x)
 
     # Initial - liquid
     nmol_test .= nmol ./ p_sat ./ sum(nmol[i] / p_sat[i] for i in 1:nc)
@@ -227,24 +233,20 @@ function vt_stability(
     nmol_test .*= p_init / (z_lg * RT * sum(nmol_test))
 
     D_lg = D_min(nmol_test, optmethod)
-
-    if D_lg < thresh
-        return false, optmethod.x
-    end
+    results[3] = VTStabilityResult{T}(D_lg ≥ thresh, D_lg, optmethod.x)
 
     # Test - liquid
     z_ll = compressibility(mix, nmol_test, p_init, RT, 'l')
     nmol_test .*= z_lg / z_ll
 
     D_ll = D_min(nmol_test, optmethod)
-
-    if D_ll < thresh
-        return false, optmethod.x
-    end
+    results[4] = VTStabilityResult{T}(D_ll ≥ thresh, D_ll, optmethod.x)
 
     if isnan(D_gg) && isnan(D_gl) && isnan(D_lg) && isnan(D_ll)  # все 4 попытки провалились
         error("VTStability: all tries have failed")
     end
 
-    return true, optmethod.x
+    isstable = results[1].isstable && results[2].isstable && results[3].isstable && results[4].isstable
+
+    return isstable, results
 end

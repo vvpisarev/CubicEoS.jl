@@ -6,6 +6,7 @@ export molar_mass, carbon_number, name, describe, load, components # Do we need 
 export ncomponents, pressure, wilson_saturation_pressure, compressibility
 export log_c_activity!, log_c_activity, log_c_activity_wj!, log_c_activity_wj
 export vt_stability, vt_stability_buffer
+export vt_flash
 
 include("constants.jl")
 include("types.jl")
@@ -14,5 +15,6 @@ include("dbload.jl")
 include("basic_thermo.jl")
 include("chempotential.jl")
 include("vt_stability.jl")
+include("vt_flash.jl")
 
 end # module

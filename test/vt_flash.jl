@@ -1,5 +1,5 @@
 using CubicEoS
-using CubicEoSDatabase: Data
+# using CubicEoSDatabase: Data
 using LinearAlgebra
 
 
@@ -89,10 +89,11 @@ end
 mix = load(
     BrusilovskyEoSMixture;
     names=("methane", "n-pentane"),
-    component_dbs=(Data.martinez(), Data.brusilovsky_comp()),
-    mix_eos_db=Data.brusilovsky_mix()
+    # component_dbs=(Data.martinez(), Data.brusilovsky_comp()),
+    # mix_eos_db=Data.brusilovsky_mix()
 )
-
+# dump(mix)
+# # exit()
 # [0.547413, 0.452587] mole fractions from (Mikyska, 2013, Example 2)
 # V = 1e-6 from old vtflash
 # (5e3 * V) is (5 kmol m⁻³ * V) just an ordinary value
@@ -100,8 +101,8 @@ mix = load(
 # T = 440 Kelvins at 5 kmol m⁻³ should correspond to single-phase
 
 V = 1e-6
-N = (9750 * V) .* [0.547413, 0.452587]
-RT = 302 * CubicEoS.GAS_CONSTANT_SI
+N = (7100 * V) .* [0.547413, 0.452587]
+RT = 300 * CubicEoS.GAS_CONSTANT_SI
 
 # closures
 constrain_step, helmholtz_diff_grad!, helmholtz_diff! = CubicEoS.vt_flash_closures(mix, N, V, RT)
@@ -111,9 +112,9 @@ issinglephase, vt_stab_tries = vt_stability(mix, N, V, RT)
 conc₁ = CubicEoS.__vt_flash_init_conc_choose(vt_stab_tries)
 println(stderr, "Is single phase: ", issinglephase)
 println(stderr, "Concentration from vt_stability ", conc₁)
-for vttry in vt_stab_tries
-    dump(vttry)
-end
+# for vttry in vt_stab_tries
+#     dump(vttry)
+# end
 
 # initial state debug
 # state = fill(NaN, ncomponents(mix) + 1)
@@ -139,7 +140,7 @@ end
 #     satinit=1,
 # )
 
-vt_flash_helmoltz_diff_saturation_tries(mix=mix, nmol=N, RT=RT, volume=V)
+# vt_flash_helmoltz_diff_saturation_tries(mix=mix, nmol=N, RT=RT, volume=V)
 
 # ∇P = fill(NaN, ncomponents(mix) + 1)
 # CubicEoS.__vt_flash_pressure_gradient!(∇P, mix, N, V, RT)
@@ -150,5 +151,5 @@ vt_flash_helmoltz_diff_saturation_tries(mix=mix, nmol=N, RT=RT, volume=V)
 # CubicEoS.__vt_flash_hessian!(ℍ, state, mix, N, V, RT)
 # dump(ℍ)
 
-# state = vt_flash(mix, N, V, RT)
-# dump(state)
+state = vt_flash(mix, N, V, RT)
+dump(state)

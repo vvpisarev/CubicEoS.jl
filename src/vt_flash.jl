@@ -179,7 +179,7 @@ function vt_flash_closures(
     end
 
     function constrain_step(state::AbstractVector{T}, dir::AbstractVector{T})
-        αm = convert(T, Inf)
+        αm = T(Inf)
         # # positiveness constrain (`0 < state[i] + α * dir[i] < 1`)
         @inbounds for i in eachindex(state)
             if dir[i] > 0
@@ -195,17 +195,27 @@ function vt_flash_closures(
         end
 
         # covolume constrain
-        αm_covolume = - dot(state, covolumes_b̃) / dot(dir, covolumes_b̃)
+        "Covolume edge by phase 1."
+        αm_cov₁ = - dot(state, covolumes_b̃) / dot(dir, covolumes_b̃)
+        "Covolume edge by phase 2."  # state₂ = 1 .- state
+        αm_cov₂ = - (sum(covolumes_b̃) - dot(state, covolumes_b̃)) / dot(dir, covolumes_b̃)
+
         if dot(dir, covolumes_b̃) > 0
-            if 0 < αm_covolume < αm
-                αm = αm_covolume
+            if 0 < αm_cov₁ < αm
+                αm = αm_cov₁
+            end
+            if 0 < αm_cov₂ < αm
+                αm = αm_cov₂
             end
         else
-            if αm < αm_covolume
-                @warn "Covolume constrain not meet others"
+            if αm < αm_cov₁
+                @warn "Covolume constrain of phase 1 not meet others"
+            end
+            if αm < αm_cov₂
+                @warn "Covolume constrain of phase 2 not meet others"
             end
         end
-        if αm == Inf
+        if αm == T(Inf)
             error("VTFlash: constrain_step. Step was not found.")
         end
         return 0.9 * αm

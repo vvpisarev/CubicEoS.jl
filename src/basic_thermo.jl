@@ -13,7 +13,7 @@ include("solvecubic.jl")
 
 Return EoS coefficient ``a(T, Ψ) = a_c ϕ(T, Ψ)`` of `substance` at given `RT`.
 ```math
-ϕ(T, psi) = [ 1 + Ψ (1 - T_r^0.5) ]^2
+ϕ(T, Ψ) = [ 1 + Ψ (1 - T_r^0.5) ]^2
 ```
 Reference: Brusilovsky2002[section: 5.5.2 (algorithm step 3), eq: (4.34), see p.142 and p.164]
 """

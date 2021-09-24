@@ -61,11 +61,13 @@ end
     solve_cubic!(roots_::AbstractVector, a, b, c, d)
     --> updated roots_
 
-See [`solve_cubic`](@ref). Fill first three items of `roots_`.
-    roots_ should have length = 3
-    updated roots_ will contain real roots of the equation and NaNs
+Fill first three items of `roots_` with the real roots of equation or `NaN`s.
+```math
+a x^3 + b x^2 + c x + d = 0
+```
+See also: [`solve_cubic`](@ref). 
 """
-function solve_cubic!(roots_::AbstractVector, a, b, c, d)
-    roots_ .= solve_cubic(a, b, c, d)
+Base.@propagate_inbounds function solve_cubic!(roots_::AbstractVector, a, b, c, d)
+    @view(roots_[1:3]) .= solve_cubic(a, b, c, d)
     return roots_
 end

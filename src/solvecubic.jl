@@ -59,20 +59,13 @@ end
 
 """
     solve_cubic!(roots_::AbstractVector, a, b, c, d)
-    --> updated roots!
+    --> updated roots_
 
-    Finds real roots of a cubic equation
-    ```math
-    a x^3 + b x^2 + c x + d = 0
-    ```
-
-    roots! should have length = 3
-    updated roots! will contain real roots of the equation and NaNs
-
-Reference: J. F. Blinn, "How to Solve a Cubic Equation, Part 5: Back to Numerics",
-in IEEE Computer Graphics and Applications, vol. 27, no. 3, pp. 78-89, May-June 2007.
-doi: 10.1109/MCG.2007.60
+See [`solve_cubic`](@ref). Fill first three items of `roots_`.
+    roots_ should have length = 3
+    updated roots_ will contain real roots of the equation and NaNs
 """
 function solve_cubic!(roots_::AbstractVector, a, b, c, d)
     roots_ .= solve_cubic(a, b, c, d)
+    return roots_
 end

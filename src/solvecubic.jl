@@ -42,7 +42,7 @@ function solve_cubic(a, b, c, d)
         δ₁ == δ₂ == δ₃ == 0 && return (-B/A, -B/A, -B/A)
         sΔ = sqrt(Δ)
         θA, θD = abs.(atan.((A*sΔ, 2*B*δ₁ - A*δ₂, D*sΔ, D*δ₂ - 2*C*δ₃)) ./ 3)
-        sCA, sCD = sqrt.(abs.((δ₁, δ₃)))
+        sCA, sCD = sqrt.(.-min.((δ₁, δ₃), 0))
         x₁A, x₁D = 2 .* (sCA, sCD) .* cos.((θA, θD))
         x₃A, x₃D = .-(sCA, sCD) .* (cos.((θA, θD)) .+ sqrt(3) .* sin.((θA, θD)))
         xlt = (x₁A + x₃A > 2 * B) ? x₁A : x₃A

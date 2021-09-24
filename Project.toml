@@ -7,6 +7,7 @@ version = "0.1.0"
 CubicEoSDatabase = "8742253c-1987-415f-b31d-1ec9670d9ed7"
 DescentMethods = "f4becde8-b16e-4b5a-8f91-16ef0c22c8bc"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+PositiveFactorizations = "85a6dd25-e78a-55b7-8502-1745935b8125"
 
 [compat]
 julia = "1.4"

@@ -18,4 +18,5 @@ end
     include("basic_thermo.jl")
     include("chempotential.jl")
     include("solvecubic.jl")
+    include("newton.jl")
 end

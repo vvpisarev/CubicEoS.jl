@@ -8,25 +8,37 @@ struct NewtonResult{T}
     NewtonResult(conv, x) = new{Float64}(conv, copy(x))
 end
 
+function backtracking_line_search(f, ∇f, x, d, α; p=0.5, β=1e-4)
+    y, g = f(x), ∇f(x)
+    while f(x + α*d) > y + β*α*(g⋅d)
+        α *= p
+    end
+    return α
+end
+
 """
 `∇f(x) -> gradient` return gradient of `f` at `x`.
 `H -> hessian` return hessian of `f` at `x`.
 `x` -> initial `x`.
 """
-function newton(∇f, H, x;
+function newton(f, ∇f, H, x;
     ∇atol=1e-6,
     maxiter=100,
     constrain_step=(x, δ)->1,
 )
     for i in 1:maxiter
-        H̃ = cholesky(Positive, H(x))
+        hess = copy(H(x))
+        H̃ = DescentMethods.mcholesky!(hess)
         ∇ = ∇f(x)
         δx = - (H̃ \ ∇)  # brackets because there is no unary - for ::Cholesky{...}
-        α = constrain_step(x, δx)
 
-        @debug "newton" i repr(δx) repr(α) repr(x) norm(∇f(x)) isposdef(H̃)
+        αmax = constrain_step(x, δx)
+        α = backtracking_line_search(f, ∇f, x, δx, αmax; p=0.5, β=1e-4)
 
-        x += min(1, α) * δx
+        x += α * δx
+
+        @debug "newton" i repr(δx) repr(α) repr(x) f(x) norm(∇f(x)) isposdef(H̃)
+
         if norm(∇, 2) ≤ ∇atol
             return NewtonResult(true, x)
         end
@@ -81,8 +93,12 @@ function vt_flash_newton(
         error("VTFlash: Initial state was not found!")
     end
 
-    # gradient function
     gradient = Vector{T}(undef, length(state))
+    helmholtz_diff = function(x)
+        ΔA, _ = helmholtz_diff!(x, gradient)
+        return ΔA
+    end
+    # gradient function
     helmholtz_diff_gradient = function (x)
         helmholtz_diff_grad!(x, gradient)
         return gradient
@@ -97,7 +113,11 @@ function vt_flash_newton(
     @debug "VTFlash: initial" isposdef(helmholtz_diff_hessian(state))
 
     # run optimizer
-    result = newton(helmholtz_diff_gradient, helmholtz_diff_hessian, state;
+    result = newton(
+        helmholtz_diff,
+        helmholtz_diff_gradient,
+        helmholtz_diff_hessian,
+        state;
         constrain_step=constrain_step,
         ∇atol=1e-3,
     )

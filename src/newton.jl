@@ -9,9 +9,12 @@ struct NewtonResult{T}
 end
 
 function backtracking_line_search(f, ∇f, x, d, α; p=0.5, β=1e-4)
-    y, g = f(x), ∇f(x)
-    while f(x + α*d) > y + β*α*(g⋅d)
+    # y, g = f(x), ∇f(x)
+    # while f(x + α*d) > y + β*α*(g⋅d)
+    y = f(x)
+    while f(x + α*d) > y
         α *= p
+        @debug "backtracking_line_search" α p
     end
     return α
 end
@@ -23,7 +26,7 @@ end
 """
 function newton(f, ∇f, H, x;
     ∇atol=1e-6,
-    maxiter=100,
+    maxiter=1000,
     constrain_step=(x, δ)->1,
 )
     for i in 1:maxiter

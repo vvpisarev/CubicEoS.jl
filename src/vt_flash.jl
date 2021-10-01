@@ -197,22 +197,22 @@ function vt_flash_closures(
         # covolume constrain
         "Covolume edge by phase 1."
         αm_cov₁ = - dot(state, covolumes_b̃) / dot(dir, covolumes_b̃)
-        "Covolume edge by phase 2."  # state₂ = 1 .- state
-        αm_cov₂ = - (sum(covolumes_b̃) - dot(state, covolumes_b̃)) / dot(dir, covolumes_b̃)
+        "Covolume edge by phase 2."
+        αm_cov₂ = (sum(covolumes_b̃) - dot(state, covolumes_b̃)) / dot(dir, covolumes_b̃)
 
         if dot(dir, covolumes_b̃) > 0
             if 0 < αm_cov₁ < αm
                 αm = αm_cov₁
             end
-            if 0 < αm_cov₂ < αm
-                αm = αm_cov₂
+            if αm < αm_cov₂
+                @warn "Covolume constrain of phase 2 not meet others"
             end
         else
             if αm < αm_cov₁
                 @warn "Covolume constrain of phase 1 not meet others"
             end
-            if αm < αm_cov₂
-                @warn "Covolume constrain of phase 2 not meet others"
+            if 0 < αm_cov₂ < αm
+                αm = αm_cov₂
             end
         end
         if αm == T(Inf)

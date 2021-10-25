@@ -1,31 +1,33 @@
 """
-    solve_cubic(a, b, c, d)
+    solve_cubic(a::Real, b::Real, c::Real, d::Real)
 
 Finds real roots of a cubic equation
 ```math
 a x^3 + b x^2 + c x + d = 0
 ```
 
-Return Tuple{T, T, T} where first roots are real,
+Return Tuple{Float64, Float64, Float64} where first roots are real,
 complex roots are defined to `NaN`
 
-Reference: J. F. Blinn, "How to Solve a Cubic Equation, Part 5: Back to Numerics",
-in IEEE Computer Graphics and Applications, vol. 27, no. 3, pp. 78-89, May-June 2007.
+Reference: J. F. Blinn, "How to Solve a Cubic Equation, Part 5: Back to Numerics," in IEEE Computer Graphics and Applications, vol. 27, no. 3, pp. 78-89, May-June 2007.
 doi: 10.1109/MCG.2007.60
 """
-function solve_cubic(a, b, c, d)
+function solve_cubic(a::Real, b::Real, c::Real, d::Real)
     # convert to Ax³ + 3Bx² + 3Cx + D = 0
-    A, B, C, D = promote(float(a), float(b), float(c), float(d)) ./ (1, 3, 3, 1)
+    A, B, C, D = promote(float(a), float(b) / 3, float(c) / 3, float(d))
     δ₁ = A * C - B * B
     δ₂ = A * D - B * C
     δ₃ = B * D - C * C
     d13 = δ₁ * δ₃
     d22 = δ₂ * δ₂
     Δ = 4 * d13 - d22
+    if abs(Δ) < eps(d22)
+        Δ = zero(Δ)
+    end
     nanvalue = zero(A) / zero(A)
 
     if Δ < 0
-        At = Cb = Db = zero(A) # A-tilde, C-bar, D-bar
+        At, Cb, Db = zero.((A, C, D)) # A-tilde, C-bar, D-bar
         if B^3 * D >= A * C^3
             At, Cb, Db = A, δ₁, -2 * B * δ₁ + A * δ₂
         else
@@ -41,14 +43,15 @@ function solve_cubic(a, b, c, d)
     else
         δ₁ == δ₂ == δ₃ == 0 && return (-B/A, -B/A, -B/A)
         sΔ = sqrt(Δ)
-        θA, θD = abs.(atan.((A*sΔ, 2*B*δ₁ - A*δ₂, D*sΔ, D*δ₂ - 2*C*δ₃)) ./ 3)
-        sCA, sCD = sqrt.(.-min.((δ₁, δ₃), 0))
-        x₁A, x₁D = 2 .* (sCA, sCD) .* cos.((θA, θD))
-        x₃A, x₃D = .-(sCA, sCD) .* (cos.((θA, θD)) .+ sqrt(3) .* sin.((θA, θD)))
-        xlt = (x₁A + x₃A > 2 * B) ? x₁A : x₃A
-        xst = (x₁D + x₃D < 2 * C) ? x₁D : x₃D
+        θA, θD = (atan(A*sΔ, 2*B*δ₁ - A*δ₂), atan(D*sΔ, D*δ₂ - 2*C*δ₃)) ./ 3 .|> abs
+        sCA, sCD = sqrt(-δ₁), sqrt(-δ₃)
+        x₁A, x₁D = 2*sCA*cos(θA), 2*sCD*cos(θD)
+        x₃A, x₃D = -sCA*(cos(θA)+sqrt(3)*sin(θA)), -sCD*(cos(θD)+sqrt(3)*sin(θD))
+        xlt = (x₁A+x₃A > 2*B) ? x₁A : x₃A
+        xst = (x₁D+x₃D < 2*C) ? x₁D : x₃D
         xl, wl = xlt - B, A
         xs, ws = -D, xst + C
+        Δ == 0 && return (xs / ws, xl / wl, nanvalue)
         E = wl * ws
         F = -xl * ws - wl * xs
         G = xl * xs
@@ -58,16 +61,11 @@ function solve_cubic(a, b, c, d)
 end
 
 """
-    solve_cubic!(roots_::AbstractVector, a, b, c, d)
-    --> updated roots_
+    solve_cubic!(roots!::AbstarctVector, a, b, c, d) -> roots!
 
-Fill first three items of `roots_` with the real roots of equation or `NaN`s.
-```math
-a x^3 + b x^2 + c x + d = 0
-```
-See also: [`solve_cubic`](@ref). 
+See [`solve_cubic`](@ref). Fill first three items of `roots!`.
 """
-Base.@propagate_inbounds function solve_cubic!(roots_::AbstractVector, a, b, c, d)
-    @view(roots_[1:3]) .= solve_cubic(a, b, c, d)
-    return roots_
+function solve_cubic!(roots!::AbstractVector, a::Real, b::Real, c::Real, d::Real)
+    roots![1:3] .= solve_cubic(a, b, c, d)
+    return roots!
 end

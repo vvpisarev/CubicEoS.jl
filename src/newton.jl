@@ -9,9 +9,7 @@ struct NewtonResult{T}
 end
 
 function backtracking_line_search(f, ∇f, x, d, α; p=0.5, β=1e-4)
-    # y, g = f(x), ∇f(x)
-    # while f(x + α*d) > y + β*α*(g⋅d)
-    y = f(x)
+    y, g = f(x), ∇f(x)
     while f(x + α*d) > y
         α *= p
         @debug "backtracking_line_search" α p
@@ -31,16 +29,20 @@ function newton(f, ∇f, H, x;
 )
     for i in 1:maxiter
         hess = copy(H(x))
-        H̃ = DescentMethods.mcholesky!(hess)
+        if !isposdef(hess)
+            H̃ = DescentMethods.mcholesky!(hess)
+        else
+            H̃ = hess
+        end
         ∇ = ∇f(x)
-        δx = - (H̃ \ ∇)  # brackets because there is no unary - for ::Cholesky{...}
+        δx = - (H̃ \ ∇)
 
-        αmax = constrain_step(x, δx)
+        αmax = min(0.5, constrain_step(x, δx))
         α = backtracking_line_search(f, ∇f, x, δx, αmax; p=0.5, β=1e-4)
 
         x += α * δx
 
-        @debug "newton" i repr(δx) repr(α) repr(x) f(x) norm(∇f(x)) isposdef(H̃)
+        @debug "newton" i repr(δx) norm(δx, 2) α repr(x) f(x) norm(∇f(x)) isposdef(H̃) det(H̃)
 
         if norm(∇, 2) ≤ ∇atol
             return NewtonResult(true, x)

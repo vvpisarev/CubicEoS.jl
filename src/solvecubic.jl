@@ -25,8 +25,8 @@ function solve_cubic(a, b, c, d)
     nanvalue = zero(A) / zero(A)
 
     if Δ < 0
-        At = Cb = Db = zero(A) # A-tilde, C-bar, D-bar
-        if B^3 * D >= A * C^3
+        At = Cb = Db = zero(A)  # A-tilde, C-bar, D-bar
+        if B^3 * D ≥ A * C^3
             At, Cb, Db = A, δ₁, -2 * B * δ₁ + A * δ₂
         else
             At, Cb, Db = D, δ₃, -D * δ₂ + 2 * C * δ₃
@@ -35,8 +35,8 @@ function solve_cubic(a, b, c, d)
         T₁ = -Db + T₀
         p = cbrt(T₁ / 2)
         q = T₁ == T₀ ? -p : -Cb / p
-        x₁ = Cb <= 0 ? p + q : -Db / (p^2 + q^2 + Cb)
-        x, w = B^3 * D >= A * C^3 ? (x₁ - B, A) : (-D, x₁ + C)
+        x₁ = Cb ≤ 0 ? p + q : -Db / (p^2 + q^2 + Cb)
+        x, w = B^3 * D ≥ A * C^3 ? (x₁ - B, A) : (-D, x₁ + C)
         return (x/w, nanvalue, nanvalue)
     else
         δ₁ == δ₂ == δ₃ == 0 && return (-B/A, -B/A, -B/A)
@@ -53,19 +53,18 @@ function solve_cubic(a, b, c, d)
         F = -xl * ws - wl * xs
         G = xl * xs
         xm, wm = C * F - B * G, C * E - B * F
-        return (xs / ws, xm / wm, xl / wl)
+        return (xs/ws, xm/wm, xl/wl)
     end
 end
 
 """
     solve_cubic!(roots_::AbstractVector, a, b, c, d)
-    --> updated roots_
 
 Fill first three items of `roots_` with the real roots of equation or `NaN`s.
 ```math
 a x^3 + b x^2 + c x + d = 0
 ```
-See also: [`solve_cubic`](@ref). 
+See also: [`solve_cubic`](@ref).
 """
 Base.@propagate_inbounds function solve_cubic!(roots_::AbstractVector, a, b, c, d)
     @view(roots_[1:3]) .= solve_cubic(a, b, c, d)

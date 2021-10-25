@@ -37,14 +37,14 @@ function solve_cubic(a, b, c, d)
         q = T₁ == T₀ ? -p : -Cb / p
         x₁ = Cb <= 0 ? p + q : -Db / (p^2 + q^2 + Cb)
         x, w = B^3 * D >= A * C^3 ? (x₁ - B, A) : (-D, x₁ + C)
-        return (x / w, nanvalue, nanvalue)
+        return (x/w, nanvalue, nanvalue)
     else
         δ₁ == δ₂ == δ₃ == 0 && return (-B/A, -B/A, -B/A)
         sΔ = sqrt(Δ)
         θA, θD = abs.(atan.((A*sΔ, 2*B*δ₁ - A*δ₂, D*sΔ, D*δ₂ - 2*C*δ₃)) ./ 3)
         sCA, sCD = sqrt.(.-min.((δ₁, δ₃), 0))
         x₁A, x₁D = 2 .* (sCA, sCD) .* cos.((θA, θD))
-        x₃A, x₃D = .-(sCA, sCD) .* (cos.((θA, θD)) .+ sqrt(3) .* sin.((θA, θD)))
+        x₃A, x₃D = .-((sCA, sCD)) .* (cos.((θA, θD)) .+ sqrt(3) .* sin.((θA, θD)))
         xlt = (x₁A + x₃A > 2 * B) ? x₁A : x₃A
         xst = (x₁D + x₃D < 2 * C) ? x₁D : x₃D
         xl, wl = xlt - B, A

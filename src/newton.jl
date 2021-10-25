@@ -1,6 +1,9 @@
 using PositiveFactorizations
 using LinearAlgebra
 
+struct Newton{M<:AbstractMatrix}
+    hess::M
+end
 
 struct NewtonResult{T}
     converged::Bool
@@ -8,9 +11,17 @@ struct NewtonResult{T}
     NewtonResult(conv, x) = new{Float64}(conv, copy(x))
 end
 
-function backtracking_line_search(f, ∇f, x, d, α; p=0.5, β=1e-4)
-    y, g = f(x), ∇f(x)
-    while f(x + α*d) > y
+function backtracking_line_search(
+    f::Function,
+    x::AbstractVector{T},
+    d::AbstractVector{T},
+    α::Real;
+    p::Real=0.5,
+    β::Real=1e-4,
+    buffer::AbstractVector{T}=similar(x),
+) where {T<:Real}
+    y = f(x, buffer)
+    while f(x + α*d, buffer) > y
         α *= p
         @debug "backtracking_line_search" α p
     end
@@ -18,31 +29,35 @@ function backtracking_line_search(f, ∇f, x, d, α; p=0.5, β=1e-4)
 end
 
 """
-`∇f(x) -> gradient` return gradient of `f` at `x`.
-`H -> hessian` return hessian of `f` at `x`.
+`∇f!(∇, x) -> update ∇ with gradient and return it
+`H!(hess, x) -> hessian` return hessian of `f` at `x`.
 `x` -> initial `x`.
 """
-function newton(f, ∇f, H, x;
-    ∇atol=1e-6,
-    maxiter=1000,
-    constrain_step=(x, δ)->1,
-)
+function newton(
+    f::Function,
+    ∇f!::Function,
+    H!::Function,
+    x::AbstractVector{T};
+    ∇atol::Real=1e-6,
+    maxiter::Integer=200,
+    constrain_step::Function=(x, δ)->1,
+) where {T<:Real}
+    ∇ = similar(x)
+    hess_full = Matrix{T}(undef, size(∇, 1), size(∇, 1))
+
     for i in 1:maxiter
-        hess = copy(H(x))
-        if !isposdef(hess)
-            H̃ = DescentMethods.mcholesky!(hess)
-        else
-            H̃ = hess
-        end
-        ∇ = ∇f(x)
-        δx = - (H̃ \ ∇)
+        hess_full = H!(hess_full, x)
+
+        hess = DescentMethods.mcholesky!(hess_full)  # always do decomposition
+        ∇ = ∇f!(∇, x)
+        δx = - (hess \ ∇)
 
         αmax = min(0.5, constrain_step(x, δx))
-        α = backtracking_line_search(f, ∇f, x, δx, αmax; p=0.5, β=1e-4)
+        α = backtracking_line_search(f, x, δx, αmax; p=0.5, β=1e-4, buffer=∇)
 
         x += α * δx
 
-        @debug "newton" i repr(δx) norm(δx, 2) α repr(x) f(x) norm(∇f(x)) isposdef(H̃) det(H̃)
+        @debug "newton" i repr(δx) norm(δx, 2) α repr(x) f(x, ∇) norm(∇f(∇, x)) isposdef(H̃) det(H̃)
 
         if norm(∇, 2) ≤ ∇atol
             return NewtonResult(true, x)
@@ -98,19 +113,24 @@ function vt_flash_newton(
         error("VTFlash: Initial state was not found!")
     end
 
-    gradient = Vector{T}(undef, length(state))
-    helmholtz_diff = function(x)
+    # closures for newton algorithm
+    # helmholtz
+    function helmholtz_diff_newton(
+        x::AbstractVector{T},
+        gradient::AbstractVector{T},  # pass it cause `helmholtz_diff!` needs
+    )
         ΔA, _ = helmholtz_diff!(x, gradient)
         return ΔA
     end
-    # gradient function
-    helmholtz_diff_gradient = function (x)
-        helmholtz_diff_grad!(x, gradient)
-        return gradient
+
+    # helmholtz gradient
+    function helmholtz_diff_gradient!(gradient_::AbstractVector{T}, x::AbstractVector{T})
+        helmholtz_diff_grad!(x, gradient_)  # yes, base func uses this signature
+        return gradient_
     end
-    # hessian function
-    hessian = Matrix{T}(undef, (length(state), length(state)))
-    helmholtz_diff_hessian = function (x)
+
+    # helmholtz hessian
+    function helmholtz_diff_hessian!(hessian::AbstractMatrix{T}, x::AbstractVector{T})
         __vt_flash_hessian!(hessian, x, mix, nmol, volume, RT)
         return hessian
     end
@@ -119,9 +139,9 @@ function vt_flash_newton(
 
     # run optimizer
     result = newton(
-        helmholtz_diff,
-        helmholtz_diff_gradient,
-        helmholtz_diff_hessian,
+        helmholtz_diff_newton,
+        helmholtz_diff_gradient!,
+        helmholtz_diff_hessian!,
         state;
         constrain_step=constrain_step,
         ∇atol=1e-3,

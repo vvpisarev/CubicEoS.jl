@@ -157,21 +157,26 @@ function vt_flash_closures(
     log_cₐ₁ = Vector{T}(undef, ncomponents(mix))
     log_cₐ₂ = Vector{T}(undef, ncomponents(mix))
 
+    thermo_buf = thermo_buffer(mix)
+
     # calculates once
-    Pbase = pressure(mix, nmol, volume, RT)
+    Pbase = pressure(mix, nmol, volume, RT; buf=thermo_buf)
     log_cₐ_base = Vector{T}(undef, ncomponents(mix))
-    log_c_activity!(log_cₐ_base, mix, nmol, volume, RT)
+    log_c_activity!(log_cₐ_base, mix, nmol, volume, RT; buf=thermo_buf)
 
     "Constant vector for covolume constrain. [Nᵢbᵢ..., -V]"
     covolumes_b̃ = [(c.b for c in components(mix))..., 1]
     covolumes_b̃[1:end-1] .*= nmol
     covolumes_b̃[end] *= -volume
 
+    # for `transform` function
+    Tr_matrix = Diagonal([nmol..., volume])
+    state_tr = Vector{T}(undef, size(Tr_matrix, 1))
+
     "Updates `N₁`, `N₂`. Returns `state_tr`, `V₁`, `V₂` from `state`."
     function transform(state::AbstractVector{T})
-        Tr = Diagonal([nmol..., volume])
-        state_tr = Tr * state
-        N₁ .= state_tr[1:end-1]
+        mul!(state_tr, Tr_matrix, state)
+        N₁ .= @view state_tr[1:end-1]
         N₂ .= nmol .- N₁
         V₁ = state_tr[end]
         V₂ = volume - V₁
@@ -223,22 +228,22 @@ function vt_flash_closures(
 
     function helmholtz_diff_grad!(state::AbstractVector{T}, grad::AbstractVector{T})
         _, V₁, V₂ = transform(state)
-        log_c_activity!(log_cₐ₁, mix, N₁, V₁, RT)
-        log_c_activity!(log_cₐ₂, mix, N₂, V₂, RT)
+        log_c_activity!(log_cₐ₁, mix, N₁, V₁, RT; buf=thermo_buf)
+        log_c_activity!(log_cₐ₂, mix, N₂, V₂, RT; buf=thermo_buf)
 
         @inbounds for i in 1:length(state)-1
             Δμ = -RT * (log((N₂[i]/V₂) / (N₁[i]/V₁)) - (log_cₐ₁[i] - log_cₐ₂[i]))
             grad[i] = nmol[i] * Δμ
         end
-        P₁ = pressure(mix, N₁, V₁, RT)
-        P₂ = pressure(mix, N₂, V₂, RT)
+        P₁ = pressure(mix, N₁, V₁, RT; buf=thermo_buf)
+        P₂ = pressure(mix, N₂, V₂, RT; buf=thermo_buf)
         grad[end] = volume * (-P₁ + P₂)
         return grad
     end
     function helmholtz_diff!(state::AbstractVector{T}, grad::AbstractVector{T})
         _, V₁, V₂ = transform(state)
 
-        log_c_activity!(log_cₐ₂, mix, N₂, V₂, RT)
+        log_c_activity!(log_cₐ₂, mix, N₂, V₂, RT; buf=thermo_buf)
 
         "Σ Nᵢ (μᵢ - μ₂ᵢ)"
         Ndotμ₂ = zero(T)
@@ -248,7 +253,7 @@ function vt_flash_closures(
             Ndotμ₂ += nmol[i] * Δμ
         end
 
-        P₂ = pressure(mix, N₂, V₂, RT)
+        P₂ = pressure(mix, N₂, V₂, RT; buf=thermo_buf)
         helmholtz_diff_grad!(state, grad)  # overwrites gradient `grad`
         ΔA = dot(grad, state) + (Pbase - P₂) * volume - Ndotμ₂
         @debug "helmholtz_diff!" state=repr(state) ΔA grad=repr(grad) norm(grad, 2)

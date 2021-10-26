@@ -8,20 +8,24 @@ end
 struct NewtonResult{T}
     converged::Bool
     argument::Vector{T}
-    NewtonResult(conv, x) = new{Float64}(conv, copy(x))
+    niter::Integer
+    NewtonResult(conv, x, niter=-1) = new{Float64}(conv, copy(x), niter)
 end
 
 function backtracking_line_search(
     f::Function,
     x::AbstractVector{T},
     d::AbstractVector{T},
-    α::Real;
-    p::Real=0.5,
-    β::Real=1e-4,
+    α::T=one(T),
+    p::Real=one(T)/2,
     buffer::AbstractVector{T}=similar(x),
 ) where {T<:Real}
-    y = f(x, buffer)
-    while f(x + α*d, buffer) > y
+    y = f(x)
+    α = T(α)
+    xtry = buffer
+    while true
+        @. xtry = x + α*d
+        f(xtry) < y && break
         α *= p
         @debug "backtracking_line_search" α p
     end
@@ -37,33 +41,73 @@ function newton(
     f::Function,
     ∇f!::Function,
     H!::Function,
-    x::AbstractVector{T};
+    x::AbstractVector;
     ∇atol::Real=1e-6,
     maxiter::Integer=200,
-    constrain_step::Function=(x, δ)->1,
-) where {T<:Real}
+    constrain_step::Function=(x, δ)->one(Float64),
+)
+    x = convert(Vector{Float64}, x)
     ∇ = similar(x)
-    hess_full = Matrix{T}(undef, size(∇, 1), size(∇, 1))
+    δx = similar(x)
+    hess_full = Matrix{Float64}(undef, size(∇, 1), size(∇, 1))
+    vec = similar(x)
 
     for i in 1:maxiter
-        hess_full = H!(hess_full, x)
+        hess_full = H!(hess_full, x)  # 6 allocs
+        hess = DescentMethods.mcholesky!(hess_full)
 
-        hess = DescentMethods.mcholesky!(hess_full)  # always do decomposition
         ∇ = ∇f!(∇, x)
-        δx = - (hess \ ∇)
+
+        vec .= ∇
+        ldiv!(hess, vec)  # `hess \ ∇`, result in `vec`
+        @. δx = -vec
 
         αmax = min(0.5, constrain_step(x, δx))
-        α = backtracking_line_search(f, x, δx, αmax; p=0.5, β=1e-4, buffer=∇)
+        α = backtracking_line_search(f, x, δx, αmax, 0.5, vec)
 
-        x += α * δx
+        @. x += α * δx
 
-        @debug "newton" i repr(δx) norm(δx, 2) α repr(x) f(x, ∇) norm(∇f(∇, x)) isposdef(H̃) det(H̃)
+        @debug "newton" i repr(δx) norm(δx, 2) α repr(x) f(x, ∇) norm(∇, 2) det(hess)
 
         if norm(∇, 2) ≤ ∇atol
-            return NewtonResult(true, x)
+            return NewtonResult(true, x, i)
         end
     end
-    return NewtonResult(false, x)
+    return NewtonResult(false, x, maxiter)
+end
+
+function __vt_flash_newton_closures(
+    helmholtz_diff!::Function,      # bfgs vtflash funcs
+    helmholtz_diff_grad!::Function, #
+    mix::BrusilovskyEoSMixture{T},
+    nmol::AbstractVector{T},
+    volume::T,
+    RT::T,
+) where {T<:Real}
+    vecnc₊ = Vector{T}(undef, size(nmol, 1) + 1)
+    thermo_buf = thermo_buffer(mix)
+    hessian_buf = HessianBuffer(mix)
+
+    # below `x` is mixtures' state
+    # helmholtz
+    function func(x::AbstractVector{T})
+        ΔA, _ = helmholtz_diff!(x, vecnc₊)
+        return ΔA
+    end
+
+    # helmholtz gradient
+    function gradient!(gradient_::AbstractVector{T}, x::AbstractVector{T})
+        helmholtz_diff_grad!(x, gradient_)  # yes, base func uses this signature
+        return gradient_
+    end
+
+    # helmholtz hessian
+    function hessian!(hessian::AbstractMatrix{T}, x::AbstractVector{T})
+        __vt_flash_hessian!(hessian, x, mix, nmol, volume, RT; buf=hessian_buf)
+        return hessian
+    end
+
+    return func, gradient!, hessian!
 end
 
 function vt_flash_newton(
@@ -114,37 +158,27 @@ function vt_flash_newton(
     end
 
     # closures for newton algorithm
-    # helmholtz
-    function helmholtz_diff_newton(
-        x::AbstractVector{T},
-        gradient::AbstractVector{T},  # pass it cause `helmholtz_diff!` needs
-    )
-        ΔA, _ = helmholtz_diff!(x, gradient)
-        return ΔA
-    end
-
-    # helmholtz gradient
-    function helmholtz_diff_gradient!(gradient_::AbstractVector{T}, x::AbstractVector{T})
-        helmholtz_diff_grad!(x, gradient_)  # yes, base func uses this signature
-        return gradient_
-    end
-
-    # helmholtz hessian
-    function helmholtz_diff_hessian!(hessian::AbstractMatrix{T}, x::AbstractVector{T})
-        __vt_flash_hessian!(hessian, x, mix, nmol, volume, RT)
-        return hessian
-    end
+    newton_helmholtz_diff, newton_helmholtz_diff_grad!, newton_helmholtz_diff_hessian! =
+        __vt_flash_newton_closures(
+            helmholtz_diff!,
+            helmholtz_diff_grad!,
+            mix,
+            nmol,
+            volume,
+            RT,
+        )
 
     @debug "VTFlash: initial" isposdef(helmholtz_diff_hessian(state))
 
     # run optimizer
     result = newton(
-        helmholtz_diff_newton,
-        helmholtz_diff_gradient!,
-        helmholtz_diff_hessian!,
+        newton_helmholtz_diff,
+        newton_helmholtz_diff_grad!,
+        newton_helmholtz_diff_hessian!,
         state;
         constrain_step=constrain_step,
         ∇atol=1e-3,
+        maxiter=200,
     )
 
     return __vt_flash_two_phase_result(mix, nmol, volume, RT, result)

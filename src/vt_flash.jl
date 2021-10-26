@@ -43,13 +43,14 @@ function __vt_flash_pressure_gradient!(
     mix::BrusilovskyEoSMixture{T},
     nmol::AbstractVector,
     volume::Real,
-    RT::Real,
+    RT::Real;
+    buf::BrusilovskyThermoBuffer=thermo_buffer(mix),
 ) where {T}
     # I did not implement this function in src/basic_thermo.jl
     # because the gradient here does not include ∂P/∂T derivative.
     # Maybe, it should be implemented later in src/basic_thermo.jl.
 
-    A, B, C, D, aij = eos_parameters(mix, nmol, RT)
+    A, B, C, D, aij = eos_parameters(mix, nmol, RT; buf=buf)
 
     # hell arithmetics
     # does compiler smart to detect this as constants
@@ -80,6 +81,25 @@ function __vt_flash_pressure_gradient!(
     return nothing
 end
 
+struct HessianBuffer{T<:AbstractFloat}
+    thermo::BrusilovskyThermoBuffer{T}
+    matrnc::Matrix{T}
+    vecnc₊::Vector{T}
+    vecnc₁::Vector{T}
+    vecnc₂::Vector{T}
+end
+
+function HessianBuffer(mix::BrusilovskyEoSMixture{T}) where {T<:Real}
+    nc = ncomponents(mix)
+    return HessianBuffer{T}(
+        thermo_buffer(mix),
+        Matrix{T}(undef, nc, nc),
+        Vector{T}(undef, nc + 1),
+        Vector{T}(undef, nc),
+        Vector{T}(undef, nc),
+    )
+end
+
 """
 Calculates hessian for VTFlash from `state` and base `nmol`, `volume`.
 The `state` must be [N₁'/N₁, ..., Nₙ'/Nₙ, V'/V] vector.
@@ -90,7 +110,8 @@ function __vt_flash_hessian!(
     mix::BrusilovskyEoSMixture{T},
     nmol::AbstractVector,  # I-state
     volume::Real,          # I-state
-    RT::Real,
+    RT::Real;
+    buf::HessianBuffer=HessianBuffer(mix),
 ) where {T}
     # TODO: make hessian symmetric for optimization
 
@@ -103,23 +124,25 @@ function __vt_flash_hessian!(
     #                 [ ∂lnΦᵢ           ∂lnΦᵢ           ]
     # 𝔹ᵢⱼ = -RT Nᵢ Nⱼ [ -----(N', V') + -----(N'', V'') ]
     #                 [  ∂Nⱼ             ∂Nⱼ            ]
-    N₁ = nmol .* state[1:end-1]
+    N₁ = buf.vecnc₁
+    N₁ .= nmol .* @view state[1:end-1]
     V₁ = volume * state[end]
 
     𝔹 = @view hess[1:end-1, 1:end-1]
-    ∇P = similar(state)  # (n + 1) size
+    ∇P = buf.vecnc₊  # (n + 1) size
     ∇P⁻ = @view ∇P[1:end-1]  # n size
     # ∇P⁻ used as buffer
-    log_c_activity_wj!(∇P⁻, 𝔹, mix, N₁, V₁, RT)  # 𝔹 = jacobian'
+    log_c_activity_wj!(∇P⁻, 𝔹, mix, N₁, V₁, RT; buf=buf.thermo)  # 𝔹 = jacobian'
 
-    N₂ = nmol .- N₁
+    N₂ = buf.vecnc₂
+    N₂ .= nmol .- N₁
     V₂ = volume - V₁
-    jacobian₂ = Matrix{T}(undef, size(𝔹))
+    jacobian₂ = buf.matrnc
     # ∇P⁻ used as buffer
-    log_c_activity_wj!(∇P⁻, jacobian₂, mix, N₂, V₂, RT)
+    log_c_activity_wj!(∇P⁻, jacobian₂, mix, N₂, V₂, RT; buf=buf.thermo)
 
     𝔹 .+= jacobian₂  # 𝔹 = jacobian' + jacobian''
-    𝔹 .*= RT * (nmol * nmol')  # final 𝔹, the minus missed cuz of ln Φᵢ = -ln Cₐᵢ
+    𝔹 .*= RT .* (nmol .* nmol')  # final 𝔹, the minus missed cuz of ln Φᵢ = -ln Cₐᵢ
 
     #            [ ∂P             ∂P             ]
     # ℂᵢ = -V Nᵢ [ --- (N', V') + --- (N'', V'') ]
@@ -128,17 +151,17 @@ function __vt_flash_hessian!(
     #         [ ∂P            ∂P            ]
     # 𝔻 = -V² [ -- (N', V') + -- (N'', V'') ]
     #         [ ∂V            ∂V            ]
-    __vt_flash_pressure_gradient!(∇P, mix, N₁, V₁, RT)
+    __vt_flash_pressure_gradient!(∇P, mix, N₁, V₁, RT; buf=buf.thermo)
     ℂ = @view hess[1:end-1, end]
     ℂ .= @view ∇P[1:end-1]  # ℂ = (∂P/∂Nᵢ)'
     𝔻 = ∇P[end]  # 𝔻 = (∂P/∂V)'
 
-    __vt_flash_pressure_gradient!(∇P, mix, N₂, V₂, RT)
+    __vt_flash_pressure_gradient!(∇P, mix, N₂, V₂, RT; buf=buf.thermo)
     ℂ .+= @view ∇P[1:end-1]  # ℂ = ∇P' + ∇P''
     ℂ .*= -volume .* nmol  # final ℂ
-    # seems like can be replaced hess[end, :] .= ℂ
-    # but version below seems tracking math for me
-    hess[[end], 1:end-1] .= ℂ'  # ℂᵀ part of hessian
+
+    # hess[[end], 1:end-1] .= ℂ'  # ℂᵀ part of hessian
+    hess[end, 1:end-1] .= ℂ  # seems correct and no allocs
 
     𝔻 += ∇P[end]  # 𝔻 = (∂P/∂V)' + (∂P/∂V)''
     𝔻 *= -volume^2  # final 𝔻

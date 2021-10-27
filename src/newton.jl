@@ -8,8 +8,10 @@ end
 struct NewtonResult{T}
     converged::Bool
     argument::Vector{T}
-    niter::Integer
-    NewtonResult(conv, x, niter=-1) = new{Float64}(conv, copy(x), niter)
+    iterations::Int
+    calls::Int
+
+    NewtonResult(conv, x, iters=-1, calls=-1) = new{Float64}(conv, copy(x), iters, calls)
 end
 
 function backtracking_line_search(
@@ -20,16 +22,18 @@ function backtracking_line_search(
     p::Real=one(T)/2,
     buffer::AbstractVector{T}=similar(x),
 ) where {T<:Real}
+    calls = 1
     y = f(x)
     α = T(α)
     xtry = buffer
     while true
         @. xtry = x + α*d
+        calls += 1
         f(xtry) < y && break
         α *= p
         @debug "backtracking_line_search" α p
     end
-    return α
+    return α, calls
 end
 
 """
@@ -51,6 +55,7 @@ function newton(
     δx = similar(x)
     hess_full = Matrix{Float64}(undef, size(∇, 1), size(∇, 1))
     vec = similar(x)
+    totfcalls = 0
 
     for i in 1:maxiter
         hess_full = H!(hess_full, x)  # 6 allocs
@@ -63,17 +68,19 @@ function newton(
         @. δx = -vec
 
         αmax = min(0.5, constrain_step(x, δx))
-        α = backtracking_line_search(f, x, δx, αmax, 0.5, vec)
+        α, fcalls = backtracking_line_search(f, x, δx, αmax, 0.5, vec)
 
         @. x += α * δx
 
         @debug "newton" i repr(δx) norm(δx, 2) α repr(x) f(x, ∇) norm(∇, 2) det(hess)
 
+        totfcalls += fcalls
+
         if norm(∇, 2) ≤ ∇atol
-            return NewtonResult(true, x, i)
+            return NewtonResult(true, x, i, totfcalls)
         end
     end
-    return NewtonResult(false, x, maxiter)
+    return NewtonResult(false, x, maxiter, totfcalls)
 end
 
 function __vt_flash_newton_closures(

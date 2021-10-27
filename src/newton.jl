@@ -72,7 +72,7 @@ function newton(
 
         @. x += α * δx
 
-        @debug "newton" i repr(δx) norm(δx, 2) α repr(x) f(x, ∇) norm(∇, 2) det(hess)
+        @debug "newton" i repr(δx) norm(δx, 2) α repr(x) f(x) fcalls norm(∇, 2) det(hess)
 
         totfcalls += fcalls
 

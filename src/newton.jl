@@ -1,10 +1,11 @@
 using PositiveFactorizations
 using LinearAlgebra
 
-struct Newton{M<:AbstractMatrix}
-    hess::M
-end
-
+"""
+Result of Newton's iterations.
+Contain `converged::Bool` flag, the minimum `argument::Vector`,
+number of `iterations::Integer` and `calls::Integer`.
+"""
 struct NewtonResult{T}
     converged::Bool
     argument::Vector{T}
@@ -14,6 +15,15 @@ struct NewtonResult{T}
     NewtonResult(conv, x, iters=-1, calls=-1) = new{Float64}(conv, copy(x), iters, calls)
 end
 
+"""
+    backtracking_line_search(f, x₀, d, y₀[; α₀, p, buf])
+
+Find `x = x₀ + α*d` (`x₀::AbstractVector`, `d::AbstractVector`) that `f(x)::Real`
+is < `y₀ == f(x₀)` by exponentially decreasing `::Real` `α = α₀ * pⁱ` (`p::Real=0.5` must be < 1).
+Optional `buf` is similar to `x₀` for storing `x₀ + α*d` trial state.
+
+Return tuple of `α`, `f(x₀ + α*d)` and number of `f`'s calls.
+"""
 function backtracking_line_search(
     f::Function,
     x₀::AbstractVector{T},
@@ -38,16 +48,26 @@ function backtracking_line_search(
 end
 
 """
-`∇f!(∇, x) -> update ∇ with gradient and return it
-`H!(hess, x) -> hessian` return hessian of `f` at `x`.
-`x` -> initial `x`.
+    newton(f, grad!, hess!, x₀[; gtol, maxiter, constrain_step])
+
+Find constrained minimum of `f(x)::Real` using Newton's solver with line search
+and hessian modified by Cholesky factorization.
+`grad!(g, x)` must update and return `g`radient of `f` at `x`.
+`hess!(H, x)` must update and return `H`essian matrix of `f` at `x`.
+
+The optimization starts at `x₀` performing no more than `maxiter` Newton's steps.
+The steps finish when norm of gradient is ≤ `gtol`.
+New point `xnew <- x + αmax * d` is constrained in Newton's `d`irection by
+`constrain_step(x, d) -> α::Real`, `αmax = min(1.0, α)`.
+
+Return [`NewtonResult`](@ref) object.
 """
 function newton(
     f::Function,
     ∇f!::Function,
     H!::Function,
     x::AbstractVector;
-    ∇atol::Real=1e-6,
+    gtol::Real=1e-6,
     maxiter::Integer=200,
     constrain_step::Function=(x, δ)->one(Float64),
 )
@@ -79,16 +99,23 @@ function newton(
 
         totfcalls += fcalls
 
-        if norm(∇, 2) ≤ ∇atol
+        if norm(∇, 2) ≤ gtol
             return NewtonResult(true, x, i, totfcalls)
         end
     end
     return NewtonResult(false, x, maxiter, totfcalls)
 end
 
+"""
+Construct functions of proper signature for [`newton`](@ref) algorithm.
+The function reuses `helmholtz_diff!` and `helmholtz_diff_grad!` which are
+same as for BFGS-version of vtflash.
+
+(!) BFGS' closures must be constructed from the same thermodynamical properties.
+"""
 function __vt_flash_newton_closures(
-    helmholtz_diff!::Function,      # bfgs vtflash funcs
-    helmholtz_diff_grad!::Function, #
+    helmholtz_diff!::Function,
+    helmholtz_diff_grad!::Function,
     mix::BrusilovskyEoSMixture{T},
     nmol::AbstractVector{T},
     volume::T,
@@ -120,6 +147,12 @@ function __vt_flash_newton_closures(
     return func, gradient!, hessian!
 end
 
+"""
+    vt_flash_newton(mix, nmol, volume, RT)
+
+Find VT-equilibrium of `mix`, at given `nmol`, `volume` and thermal energy `RT`
+using Newton's minimization. Return [`VTFlashResult`](@ref).
+"""
 function vt_flash_newton(
     mix::BrusilovskyEoSMixture{T},
     nmol::AbstractVector,
@@ -187,7 +220,7 @@ function vt_flash_newton(
         newton_helmholtz_diff_hessian!,
         state;
         constrain_step=constrain_step,
-        ∇atol=1e-3,
+        gtol=1e-3,
         maxiter=200,
     )
 

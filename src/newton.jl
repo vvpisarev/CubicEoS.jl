@@ -16,24 +16,25 @@ end
 
 function backtracking_line_search(
     f::Function,
-    x::AbstractVector{T},
+    x₀::AbstractVector{T},
     d::AbstractVector{T},
+    y₀::T;
     α::T=one(T),
     p::Real=one(T)/2,
-    buffer::AbstractVector{T}=similar(x),
+    buf::AbstractVector{T}=similar(x₀),
 ) where {T<:Real}
-    calls = 1
-    y = f(x)
-    α = T(α)
-    xtry = buffer
+    xtry = buf
+    calls = 0
+    ftry = T(NaN)
     while true
-        @. xtry = x + α*d
+        @. xtry = x₀ + α*d
         calls += 1
-        f(xtry) < y && break
+        ftry = f(xtry)
+        ftry < y₀ && break
         α *= p
         @debug "backtracking_line_search" α p
     end
-    return α, calls
+    return α, ftry, calls
 end
 
 """
@@ -55,10 +56,12 @@ function newton(
     δx = similar(x)
     hess_full = Matrix{Float64}(undef, size(∇, 1), size(∇, 1))
     vec = similar(x)
-    totfcalls = 0
+
+    fval = f(x)
+    totfcalls = 1
 
     for i in 1:maxiter
-        hess_full = H!(hess_full, x)  # 6 allocs
+        hess_full = H!(hess_full, x)
         hess = DescentMethods.mcholesky!(hess_full)
 
         ∇ = ∇f!(∇, x)
@@ -67,12 +70,12 @@ function newton(
         ldiv!(hess, vec)  # `hess \ ∇`, result in `vec`
         @. δx = -vec
 
-        αmax = min(0.5, constrain_step(x, δx))
-        α, fcalls = backtracking_line_search(f, x, δx, αmax, 0.5, vec)
+        αmax = min(1.0, constrain_step(x, δx))
+        α, fval, fcalls = backtracking_line_search(f, x, δx, fval; α=αmax, p=0.5, buf=vec)
 
         @. x += α * δx
 
-        @debug "newton" i repr(δx) norm(δx, 2) α repr(x) f(x) fcalls norm(∇, 2) det(hess)
+        @debug "newton" i repr(δx) norm(δx, 2) α repr(x) fval fcalls norm(∇, 2) prod(diag(hess))
 
         totfcalls += fcalls
 

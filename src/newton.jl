@@ -41,9 +41,11 @@ function backtracking_line_search(
         @. xtry = x₀ + α*d
         calls += 1
         ftry = f(xtry)
+
+        @debug "backtracking_line_search" α p ftry y₀ ftry-y₀
+
         ftry < y₀ && break
         α *= p
-        @debug "backtracking_line_search" α p
 
         i == maxiter && error("Line search number of iterations ($(maxiter)) exceeded.")
     end
@@ -98,7 +100,7 @@ function newton(
 
         @. x += α * δx
 
-        @debug "newton" i repr(δx) norm(δx, 2) α repr(x) fval fcalls norm(∇, 2) prod(diag(hess))
+        @debug "newton" i repr(δx) norm(δx, 2) α repr(x) fval fcalls norm(∇, 2) prod(diag(hess.U))
 
         totfcalls += fcalls
 

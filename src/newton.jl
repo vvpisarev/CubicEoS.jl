@@ -36,13 +36,16 @@ function backtracking_line_search(
     xtry = buf
     calls = 0
     ftry = T(NaN)
-    while true
+    maxiter = 200
+    for i in 1:maxiter
         @. xtry = x₀ + α*d
         calls += 1
         ftry = f(xtry)
         ftry < y₀ && break
         α *= p
         @debug "backtracking_line_search" α p
+
+        i == maxiter && error("Line search number of iterations ($(maxiter)) exceeded.")
     end
     return α, ftry, calls
 end

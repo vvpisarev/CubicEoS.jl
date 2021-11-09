@@ -38,7 +38,7 @@ struct VTFlashResult{T}
     end
 end
 
-VTFlashResult{T}(; converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2, iters, fcalls) where {T} =
+VTFlashResult{T}(; converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2, iters=-1, fcalls=-1) where {T} =
 VTFlashResult{T}(converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2, iters, fcalls)
 
 "Return concentration of state with minimum energy from vt-stability tries."
@@ -93,11 +93,10 @@ function __vt_flash_pressure_gradient!(
         bᵢ, cᵢ, dᵢ = substance.b, substance.c, substance.d
         ∂ᵢA = 2 * dot(nmol, @view aij[i, :])  # ∂A/∂Nᵢ
 
-        ∇P[i] = RT * (VmB⁻¹ + bᵢ * ΣnmolbyVmB²)
-                - (
-                    (∂ᵢA * DmC - A * (dᵢ - cᵢ)) * VpC⁻¹mVpD⁻¹byDmC²
-                    + AbyDmC * (-cᵢ * VpC⁻² + dᵢ * VpD⁻²)
-                )
+        ∇P[i] = RT * (VmB⁻¹ + bᵢ * ΣnmolbyVmB²) - (
+            (∂ᵢA * DmC - A * (dᵢ - cᵢ)) * VpC⁻¹mVpD⁻¹byDmC²
+            + AbyDmC * (-cᵢ * VpC⁻² + dᵢ * VpD⁻²)
+        )
     end
     ∇P[end] = - RT * ΣnmolbyVmB² + AbyDmC * (VpC⁻² - VpD⁻²)
     return nothing

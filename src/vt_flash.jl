@@ -91,7 +91,7 @@ function __vt_flash_pressure_gradient!(
     # ∂P/∂Nᵢ part
     for (i, substance) in enumerate(components(mix))
         bᵢ, cᵢ, dᵢ = substance.b, substance.c, substance.d
-        ∂ᵢA = 2 * dot(nmol, @view aij[:,i])  # ∂A/∂Nᵢ
+        ∂ᵢA = 2 * dot(nmol, @view aij[i, :])  # ∂A/∂Nᵢ
 
         ∇P[i] = RT * (VmB⁻¹ + bᵢ * ΣnmolbyVmB²)
                 - (

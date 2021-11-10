@@ -216,8 +216,6 @@ function vt_flash_newton(
             RT,
         )
 
-    @debug "VTFlash: initial" isposdef(helmholtz_diff_hessian(state))
-
     # run optimizer
     result = newton(
         newton_helmholtz_diff,

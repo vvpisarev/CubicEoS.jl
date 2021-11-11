@@ -136,15 +136,17 @@ function __vt_flash_hessian!(
 ) where {T}
     # TODO: make hessian symmetric for optimization
 
+    # tip: \bbB<Tab> for 𝔹 and so on
+
     #     |    |   |   M   size
     #     | 𝔹  | ℂ |   --------
     # ℍ = |    |   |   𝔹   n×n
     #     |----|---|   ℂ   n×1
     #     | ℂᵀ | 𝔻 |   𝔻   1×1
 
-    #                 [ ∂lnΦᵢ           ∂lnΦᵢ           ]
-    # 𝔹ᵢⱼ = -RT Nᵢ Nⱼ [ -----(N', V') + -----(N'', V'') ]
-    #                 [  ∂Nⱼ             ∂Nⱼ            ]
+    #           [            Nᵢ²            ( ∂lnΦᵢ           ∂lnΦᵢ           ) ]
+    # 𝔹ᵢⱼ =  RT [ δᵢⱼ Nᵢ ---------- - Nᵢ Nⱼ ( -----(N', V') + -----(N'', V'') ) ]
+    #           [         N'ᵢ N''ⱼ          (  ∂Nⱼ             ∂Nⱼ            ) ]
     N₁ = buf.vecnc₁
     N₁ .= nmol .* @view state[1:end-1]
     V₁ = volume * state[end]
@@ -152,18 +154,34 @@ function __vt_flash_hessian!(
     𝔹 = @view hess[1:end-1, 1:end-1]
     ∇P = buf.vecnc₊  # (n + 1) size
     ∇P⁻ = @view ∇P[1:end-1]  # n size
+
     # ∇P⁻ used as buffer
-    log_c_activity_wj!(∇P⁻, 𝔹, mix, N₁, V₁, RT; buf=buf.thermo)  # 𝔹 = jacobian'
+    # Initialization (!) of 𝔹 with jacobian'
+    # 𝔹 = jacobian'
+    log_c_activity_wj!(∇P⁻, 𝔹, mix, N₁, V₁, RT; buf=buf.thermo)
 
     N₂ = buf.vecnc₂
     N₂ .= nmol .- N₁
     V₂ = volume - V₁
     jacobian₂ = buf.matrnc
-    # ∇P⁻ used as buffer
-    log_c_activity_wj!(∇P⁻, jacobian₂, mix, N₂, V₂, RT; buf=buf.thermo)
 
-    𝔹 .+= jacobian₂  # 𝔹 = jacobian' + jacobian''
-    𝔹 .*= RT .* (nmol .* nmol')  # final 𝔹, the minus missed cuz of ln Φᵢ = -ln Cₐᵢ
+    # ∇P⁻ used as buffer
+    # 𝔹 = jacobian' + jacobian''
+    log_c_activity_wj!(∇P⁻, jacobian₂, mix, N₂, V₂, RT; buf=buf.thermo)
+    𝔹 .+= jacobian₂
+
+    # 𝔹 = - Nᵢ Nⱼ * (jacobian' + jacobian'')
+    # the minus missed cuz of ln Φᵢ = -ln Cₐᵢ
+    𝔹 .*= nmol .* nmol'
+
+    # 𝔹, adding diagonal term
+    @inbounds for i in eachindex(nmol)
+        y₁ = N₁[i] / nmol[i]
+        y₂ = N₂[i] / nmol[i]
+        𝔹[i, i] += nmol[i] ./ (y₁ * y₂)
+    end
+    # final 𝔹
+    𝔹 .*= RT
 
     #            [ ∂P             ∂P             ]
     # ℂᵢ = -V Nᵢ [ --- (N', V') + --- (N'', V'') ]

@@ -85,6 +85,8 @@ function newton(
     fval = f(x)
     totfcalls = 1
 
+    # fdf(x, α, d) = (f(x + α*d), ∇f!(∇, x + α*d))
+
     for i in 1:maxiter
         hess_full = H!(hess_full, x)
         hess = DescentMethods.mcholesky!(hess_full)
@@ -96,6 +98,11 @@ function newton(
         @. δx = -vec
 
         αmax = min(1.0, constrain_step(x, δx))
+
+        # α = DescentMethods.strong_backtracking!(fdf, x, δx; α=1.0, αmax=αmax, σ=0.9)
+        # fcalls = 0
+        # fval = f(x + α*δx)
+
         α, fval, fcalls = backtracking_line_search(f, x, δx, fval; α=αmax, p=0.5, buf=vec)
 
         @. x += α * δx

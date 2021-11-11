@@ -176,8 +176,8 @@ function __vt_flash_hessian!(
 
     # 𝔹, adding diagonal term
     @inbounds for i in eachindex(nmol)
-        y₁ = N₁[i] / nmol[i]
-        y₂ = N₂[i] / nmol[i]
+        y₁ = state[i]      # N'ᵢ / Nᵢ
+        y₂ = 1 - state[i]  # N''ᵢ / Nᵢ
         𝔹[i, i] += nmol[i] ./ (y₁ * y₂)
     end
     # final 𝔹

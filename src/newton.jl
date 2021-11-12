@@ -36,13 +36,16 @@ function backtracking_line_search(
     xtry = buf
     calls = 0
     ftry = T(NaN)
+
+    # (?) better `maxiter = 1 + ceil(Int, log(eps(α))/log(p))`
+    # If use above, then `p^maxiter ≈ eps(α₀)`
     maxiter = 200
     for i in 1:maxiter
         @. xtry = x₀ + α*d
         calls += 1
         ftry = f(xtry)
 
-        @debug "backtracking_line_search" α p ftry y₀ ftry-y₀
+        @debug "backtracking_line_search" i α p ftry y₀ ftry-y₀
 
         ftry < y₀ && break
         α *= p
@@ -85,7 +88,23 @@ function newton(
     fval = f(x)
     totfcalls = 1
 
-    # fdf(x, α, d) = (f(x + α*d), ∇f!(∇, x + α*d))
+    """
+    Returns closure for DescentMethods.strong_backtracking!
+    Vector `v` for determine types.
+    """
+    function fdfclosure(v::AbstractVector)
+        vecx = similar(v)
+        vecg = similar(v)
+
+        function fdf(x::AbstractVector, α::Real, d::AbstractVector)
+            vecx .= x .+ α .* d
+            return f(vecx), ∇f!(vecg, vecx)
+        end
+
+        return fdf
+    end
+
+    fdf = fdfclosure(x)
 
     for i in 1:maxiter
         hess_full = H!(hess_full, x)
@@ -99,17 +118,22 @@ function newton(
 
         αmax = min(1.0, constrain_step(x, δx))
 
-        # α = DescentMethods.strong_backtracking!(fdf, x, δx; α=1.0, αmax=αmax, σ=0.9)
-        # fcalls = 0
-        # fval = f(x + α*δx)
+        @time α = DescentMethods.strong_backtracking!(fdf, x, δx; α=1.0, αmax=constrain_step(x, δx), σ=0.9)
+        fcalls = 0
+        fval = f(x + α*δx)
 
-        α, fval, fcalls = backtracking_line_search(f, x, δx, fval; α=αmax, p=0.5, buf=vec)
+        # α, fval, fcalls = backtracking_line_search(f, x, δx, fval; α=αmax, p=0.5, buf=vec)
+
+        totfcalls += fcalls
+
+        if α ≤ 0
+            @error "newton: linesearch failed" α
+            return NewtonResult(false, x, i, totfcalls)
+        end
 
         @. x += α * δx
 
-        @debug "newton" i repr(δx) norm(δx, 2) α repr(x) fval fcalls norm(∇, 2) prod(diag(hess.U))
-
-        totfcalls += fcalls
+        @debug "newton" i repr(δx) norm(δx, 2) α αmax repr(x) fval fcalls norm_grev=norm(∇) norm_gnew=norm(∇f!(similar(x), x)) prod(diag(hess.U))
 
         if norm(∇, 2) ≤ gtol
             return NewtonResult(true, x, i, totfcalls)
@@ -233,6 +257,8 @@ function vt_flash_newton(
         gtol=1e-3,
         maxiter=200,
     )
+
+    # return result
 
     return __vt_flash_two_phase_result(mix, nmol, volume, RT, result)
 end

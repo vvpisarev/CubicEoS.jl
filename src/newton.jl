@@ -106,22 +106,33 @@ function newton(
 
     fdf = fdfclosure(x)
 
+    # check gradient norm before iterations
+    ∇ = ∇f!(∇, x)
+    if norm(∇, 2) ≤ gtol
+        return NewtonResult(true, x, 0, totfcalls)
+    end
+
     for i in 1:maxiter
+        # descent direction `δx`
+
         hess_full = H!(hess_full, x)
         hess = DescentMethods.mcholesky!(hess_full)
-
-        ∇ = ∇f!(∇, x)
 
         vec .= ∇
         ldiv!(hess, vec)  # `hess \ ∇`, result in `vec`
         @. δx = -vec
 
-        αmax = min(1.0, constrain_step(x, δx))
+        # choosing step in `δx`
 
-        @time α = DescentMethods.strong_backtracking!(fdf, x, δx; α=1.0, αmax=constrain_step(x, δx), σ=0.9)
-        fcalls = 0
-        fval = f(x + α*δx)
+        α = DescentMethods.strong_backtracking!(fdf, x, δx;
+            α=1.0,  # the function takes care of initial `α` and `αmax`
+            αmax=constrain_step(x, δx),
+            σ=0.9,
+        )
+        fcalls = 0  # by current implementation they are unknown :c
 
+        # previous code, which uses "simple" backtracking
+        # αmax = min(1.0, constrain_step(x, δx))
         # α, fval, fcalls = backtracking_line_search(f, x, δx, fval; α=αmax, p=0.5, buf=vec)
 
         totfcalls += fcalls
@@ -131,10 +142,14 @@ function newton(
             return NewtonResult(false, x, i, totfcalls)
         end
 
+        # update argument `x`, function value and gradient in `x`
         @. x += α * δx
+        fval = f(x)
+        ∇ = ∇f!(∇, x)
 
-        @debug "newton" i repr(δx) norm(δx, 2) α αmax repr(x) fval fcalls norm_grev=norm(∇) norm_gnew=norm(∇f!(similar(x), x)) prod(diag(hess.U))
+        @debug "newton" i repr(δx) norm(δx, 2) α αmax repr(x) fval fcalls norm_grev=norm(∇f!(similar(x), x - α*δx)) norm_gnew=norm(∇) prod(diag(hess.U))
 
+        # check for convergence
         if norm(∇, 2) ≤ gtol
             return NewtonResult(true, x, i, totfcalls)
         end

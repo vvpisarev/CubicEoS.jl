@@ -285,7 +285,7 @@ function vt_flash_closures(
         if αm == T(Inf)
             error("VTFlash: constrain_step. Step was not found.")
         end
-        return 0.9 * αm
+        return αm
     end
 
     function helmholtz_diff_grad!(state::AbstractVector{T}, grad::AbstractVector{T})

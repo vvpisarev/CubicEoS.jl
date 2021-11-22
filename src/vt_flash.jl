@@ -253,6 +253,12 @@ function vt_flash_closures(
                 α = (1 - state[i]) / dir[i]
             elseif dir[i] < 0
                 α = - state[i] / dir[i]
+            else
+                if 0 < state[i] < 1
+                    continue
+                else
+                    error("VTFlash: constrain_step. Zero direction.")
+                end
             end
             if 0 < α < αm
                 αm = α

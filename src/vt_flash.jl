@@ -257,7 +257,7 @@ function vt_flash_closures(
                 if 0 < state[i] < 1
                     continue
                 else
-                    error("VTFlash: constrain_step. Zero direction.")
+                    error("VTFlash: constrain_step. Zero direction $i, but state[$i] = $(state[i])")
                 end
             end
             if 0 < α < αm

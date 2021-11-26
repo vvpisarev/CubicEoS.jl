@@ -198,6 +198,44 @@ function __vt_flash_newton_closures(
     return func, gradient!, hessian!
 end
 
+function vt_flash_newton(
+    mix::BrusilovskyEoSMixture{T},
+    nmol::AbstractVector,
+    volume::Real,
+    RT::Real,
+    unstable_state::AbstractVector,
+) where {T}
+    state = copy(unstable_state)
+
+    # bfgs closures, just to reuse later
+    constrain_step, helmholtz_diff_grad!, helmholtz_diff! = vt_flash_closures(
+        mix, nmol, volume, RT
+    )
+    # closures for newton algorithm
+    newton_helmholtz_diff, newton_helmholtz_diff_grad!, newton_helmholtz_diff_hessian! =
+        __vt_flash_newton_closures(
+            helmholtz_diff!,
+            helmholtz_diff_grad!,
+            mix,
+            nmol,
+            volume,
+            RT,
+        )
+
+    # run optimizer
+    result = newton(
+        newton_helmholtz_diff,
+        newton_helmholtz_diff_grad!,
+        newton_helmholtz_diff_hessian!,
+        state;
+        constrain_step=constrain_step,
+        gtol=1e-3,
+        maxiter=200,
+    )
+
+    return __vt_flash_two_phase_result(mix, nmol, volume, RT, result)
+end
+
 """
     vt_flash_newton(mix, nmol, volume, RT)
 
@@ -227,17 +265,8 @@ function vt_flash_newton(
     end
 
     # two-phase state case
-    # create closures for helmoltz energy, its gradient and constrain step
-    constrain_step, helmholtz_diff_grad!, helmholtz_diff! = vt_flash_closures(
-        mix, nmol, volume, RT
-    )
-
-    # find initial vector for optimizer
-    state = Vector{T}(undef, ncomponents(mix) + 1)
-    η₁test = __vt_flash_init_conc_choose(vt_stab_tries)
-
-    init_found = __vt_flash_initial_state!(
-        state, nmol, volume, η₁test, helmholtz_diff!, constrain_step;
+    init_found, state = __vt_flash_initial_state(
+        mix, nmol, volume, RT, vt_stab_tries;
         sat₁max=0.25,
         steps=200,
         step_scale=0.5,
@@ -251,29 +280,5 @@ function vt_flash_newton(
         error("VTFlash: Initial state was not found!")
     end
 
-    # closures for newton algorithm
-    newton_helmholtz_diff, newton_helmholtz_diff_grad!, newton_helmholtz_diff_hessian! =
-        __vt_flash_newton_closures(
-            helmholtz_diff!,
-            helmholtz_diff_grad!,
-            mix,
-            nmol,
-            volume,
-            RT,
-        )
-
-    # run optimizer
-    result = newton(
-        newton_helmholtz_diff,
-        newton_helmholtz_diff_grad!,
-        newton_helmholtz_diff_hessian!,
-        state;
-        constrain_step=constrain_step,
-        gtol=1e-3,
-        maxiter=200,
-    )
-
-    # return result
-
-    return __vt_flash_two_phase_result(mix, nmol, volume, RT, result)
+    return vt_flash_newton(mix, nmol, volume, RT, state)
 end

@@ -77,7 +77,7 @@ function newton(
     x::AbstractVector;
     gtol::Real=1e-6,
     maxiter::Integer=200,
-    constrain_step::Function=(x, δ)->one(Float64),
+    constrain_step::Function=(x, δ)->Inf,
 )
     x = convert(Vector{Float64}, x)
     ∇ = similar(x)
@@ -123,10 +123,10 @@ function newton(
         @. δx = -vec
 
         # choosing step in `δx`
-
+        αmax = constrain_step(x, δx)
         α = DescentMethods.strong_backtracking!(fdf, x, δx;
             α=1.0,  # the function takes care of initial `α` and `αmax`
-            αmax=constrain_step(x, δx),
+            αmax=αmax,
             σ=0.9,
         )
         fcalls = 0  # by current implementation they are unknown :c
@@ -147,7 +147,7 @@ function newton(
         fval = f(x)
         ∇ = ∇f!(∇, x)
 
-        @debug "newton" i repr(δx) norm(δx, 2) α αmax repr(x) fval fcalls norm_grev=norm(∇f!(similar(x), x - α*δx)) norm_gnew=norm(∇) prod(diag(hess.U))
+        @debug "newton" i repr(δx) norm_step=norm(δx, 2) α αmax repr(x) fval fcalls norm_gprev=norm(∇f!(similar(x), x - α*δx)) norm_gnew=norm(∇) prod(diag(hess.U))
 
         # check for convergence
         if norm(∇, 2) ≤ gtol

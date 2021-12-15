@@ -266,11 +266,7 @@ function vt_flash_newton(
 
     # two-phase state case
     init_found, state = __vt_flash_initial_state(
-        mix, nmol, volume, RT, vt_stab_tries;
-        sat₁max=0.25,
-        steps=200,
-        step_scale=0.5,
-        helmholtz_thresh=-1e-7,
+        mix, nmol, volume, RT, vt_stab_tries
     )
 
     @debug "VTFlash: initial state search result" found=init_found state=repr(state) ΔA=helmholtz_diff!(state, similar(state))

@@ -366,10 +366,10 @@ function __vt_flash_initial_state!(
     conc₁::AbstractVector{T},
     helmholtz_diff!::Function,
     constrain_step::Function;
-    sat₁max::Real=T(0.5),
-    steps::Int=20,
+    sat₁max::Real=T(0.9),
+    steps::Int=200,
     step_scale::Real=T(0.5),
-    helmholtz_thresh::Real=T(-1e-5),  # must be negative value
+    helmholtz_thresh::Real=T(-1e-7),  # must be negative value
 ) where {T}
     state[1:end-1] .= conc₁ * (sat₁max * volume) ./ nmol
     state[end] = sat₁max
@@ -506,11 +506,7 @@ function vt_flash(
 
     # two-phase state case
     init_found, state = __vt_flash_initial_state(
-        mix, nmol, volume, RT, vt_stab_tries;
-        sat₁max=0.25,
-        steps=200,
-        step_scale=0.5,
-        helmholtz_thresh=-1e-7,
+        mix, nmol, volume, RT, vt_stab_tries
     )
 
     @debug "VTFlash: initial state search result" found=init_found state=repr(state) ΔA=helmholtz_diff!(state, similar(state))[1]

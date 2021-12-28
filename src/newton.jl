@@ -1,4 +1,3 @@
-using PositiveFactorizations
 using LinearAlgebra
 
 """

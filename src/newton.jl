@@ -88,7 +88,7 @@ function newton(
     totfcalls = 1
 
     """
-    Returns closure for DescentMethods.strong_backtracking!
+    Returns closure for Downhill.strong_backtracking!
     Vector `v` for determine types.
     """
     function fdfclosure(v::AbstractVector)
@@ -115,7 +115,7 @@ function newton(
         # descent direction `δx`
 
         hess_full = H!(hess_full, x)
-        hess = DescentMethods.mcholesky!(hess_full)
+        hess = Downhill.mcholesky!(hess_full)
 
         vec .= ∇
         ldiv!(hess, vec)  # `hess \ ∇`, result in `vec`
@@ -123,7 +123,7 @@ function newton(
 
         # choosing step in `δx`
         αmax = constrain_step(x, δx)
-        α = DescentMethods.strong_backtracking!(fdf, x, δx;
+        α = Downhill.strong_backtracking!(fdf, x, δx;
             α=1.0,  # the function takes care of initial `α` and `αmax`
             αmax=αmax,
             σ=0.9,

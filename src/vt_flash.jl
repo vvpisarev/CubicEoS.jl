@@ -10,14 +10,36 @@ struct VTFlashResult{T}
     V_1::T
     nmol_2::Vector{T}
     V_2::T
+    iterations::Int
+    fcalls::Int
 
-    function VTFlashResult{T}(converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2) where {T}
-        return new{T}(converged, singlephase, RT, copy(nmol_1), V_1, copy(nmol_2), V_2)
+    function VTFlashResult{T}(
+        converged,
+        singlephase,
+        RT,
+        nmol_1,
+        V_1,
+        nmol_2,
+        V_2,
+        iterations=-1,
+        fcalls=-1,
+    ) where {T}
+        return new{T}(
+            converged,
+            singlephase,
+            RT,
+            copy(nmol_1),
+            V_1,
+            copy(nmol_2),
+            V_2,
+            iterations,
+            fcalls,
+        )
     end
 end
 
-VTFlashResult{T}(; converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2) where {T} =
-VTFlashResult{T}(converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2)
+VTFlashResult{T}(; converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2, iters=-1, fcalls=-1) where {T} =
+VTFlashResult{T}(converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2, iters, fcalls)
 
 "Return concentration of state with minimum energy from vt-stability tries."
 function __vt_flash_init_conc_choose(
@@ -43,13 +65,14 @@ function __vt_flash_pressure_gradient!(
     mix::BrusilovskyEoSMixture{T},
     nmol::AbstractVector,
     volume::Real,
-    RT::Real,
+    RT::Real;
+    buf::BrusilovskyThermoBuffer=thermo_buffer(mix),
 ) where {T}
     # I did not implement this function in src/basic_thermo.jl
     # because the gradient here does not include ∂P/∂T derivative.
     # Maybe, it should be implemented later in src/basic_thermo.jl.
 
-    A, B, C, D, aij = eos_parameters(mix, nmol, RT)
+    A, B, C, D, aij = eos_parameters(mix, nmol, RT; buf=buf)
 
     # hell arithmetics
     # does compiler smart to detect this as constants
@@ -68,16 +91,34 @@ function __vt_flash_pressure_gradient!(
     # ∂P/∂Nᵢ part
     for (i, substance) in enumerate(components(mix))
         bᵢ, cᵢ, dᵢ = substance.b, substance.c, substance.d
-        ∂ᵢA = 2 * dot(nmol, @view aij[:,i])  # ∂A/∂Nᵢ
+        ∂ᵢA = 2 * dot(nmol, @view aij[i, :])  # ∂A/∂Nᵢ
 
-        ∇P[i] = RT * (VmB⁻¹ + bᵢ * ΣnmolbyVmB²)
-                - (
-                    (∂ᵢA * DmC - A * (dᵢ - cᵢ)) * VpC⁻¹mVpD⁻¹byDmC²
-                    + AbyDmC * (-cᵢ * VpC⁻² + dᵢ * VpD⁻²)
-                )
+        ∇P[i] = RT * (VmB⁻¹ + bᵢ * ΣnmolbyVmB²) - (
+            (∂ᵢA * DmC - A * (dᵢ - cᵢ)) * VpC⁻¹mVpD⁻¹byDmC²
+            + AbyDmC * (-cᵢ * VpC⁻² + dᵢ * VpD⁻²)
+        )
     end
     ∇P[end] = - RT * ΣnmolbyVmB² + AbyDmC * (VpC⁻² - VpD⁻²)
     return nothing
+end
+
+struct HessianBuffer{T<:AbstractFloat}
+    thermo::BrusilovskyThermoBuffer{T}
+    matrnc::Matrix{T}
+    vecnc₊::Vector{T}
+    vecnc₁::Vector{T}
+    vecnc₂::Vector{T}
+end
+
+function HessianBuffer(mix::BrusilovskyEoSMixture{T}) where {T<:Real}
+    nc = ncomponents(mix)
+    return HessianBuffer{T}(
+        thermo_buffer(mix),
+        Matrix{T}(undef, nc, nc),
+        Vector{T}(undef, nc + 1),
+        Vector{T}(undef, nc),
+        Vector{T}(undef, nc),
+    )
 end
 
 """
@@ -90,9 +131,12 @@ function __vt_flash_hessian!(
     mix::BrusilovskyEoSMixture{T},
     nmol::AbstractVector,  # I-state
     volume::Real,          # I-state
-    RT::Real,
+    RT::Real;
+    buf::HessianBuffer=HessianBuffer(mix),
 ) where {T}
     # TODO: make hessian symmetric for optimization
+
+    # tip: \bbB<Tab> for 𝔹 and so on
 
     #     |    |   |   M   size
     #     | 𝔹  | ℂ |   --------
@@ -100,26 +144,44 @@ function __vt_flash_hessian!(
     #     |----|---|   ℂ   n×1
     #     | ℂᵀ | 𝔻 |   𝔻   1×1
 
-    #                 [ ∂lnΦᵢ           ∂lnΦᵢ           ]
-    # 𝔹ᵢⱼ = -RT Nᵢ Nⱼ [ -----(N', V') + -----(N'', V'') ]
-    #                 [  ∂Nⱼ             ∂Nⱼ            ]
-    N₁ = nmol .* state[1:end-1]
+    #             [        Nⱼ²          ( ∂lnΦᵢ           ∂lnΦᵢ           ) ]
+    # 𝔹ᵢⱼ = RT Nᵢ [ δᵢⱼ ---------- - Nⱼ ( -----(N', V') + -----(N'', V'') ) ]
+    #             [      N'ⱼ N''ⱼ       (  ∂Nⱼ             ∂Nⱼ            ) ]
+    N₁ = buf.vecnc₁
+    N₁ .= nmol .* @view state[1:end-1]
     V₁ = volume * state[end]
 
     𝔹 = @view hess[1:end-1, 1:end-1]
-    ∇P = similar(state)  # (n + 1) size
+    ∇P = buf.vecnc₊  # (n + 1) size
     ∇P⁻ = @view ∇P[1:end-1]  # n size
-    # ∇P⁻ used as buffer
-    log_c_activity_wj!(∇P⁻, 𝔹, mix, N₁, V₁, RT)  # 𝔹 = jacobian'
 
-    N₂ = nmol .- N₁
+    # ∇P⁻ used as buffer
+    # Initialization (!) of 𝔹 with jacobian'
+    # 𝔹 = jacobian'
+    log_c_activity_wj!(∇P⁻, 𝔹, mix, N₁, V₁, RT; buf=buf.thermo)
+
+    N₂ = buf.vecnc₂
+    N₂ .= nmol .- N₁
     V₂ = volume - V₁
-    jacobian₂ = Matrix{T}(undef, size(𝔹))
-    # ∇P⁻ used as buffer
-    log_c_activity_wj!(∇P⁻, jacobian₂, mix, N₂, V₂, RT)
+    jacobian₂ = buf.matrnc
 
-    𝔹 .+= jacobian₂  # 𝔹 = jacobian' + jacobian''
-    𝔹 .*= RT * (nmol * nmol')  # final 𝔹, the minus missed cuz of ln Φᵢ = -ln Cₐᵢ
+    # ∇P⁻ used as buffer
+    # 𝔹 = jacobian' + jacobian''
+    log_c_activity_wj!(∇P⁻, jacobian₂, mix, N₂, V₂, RT; buf=buf.thermo)
+    𝔹 .+= jacobian₂
+
+    # 𝔹 = - Nᵢ Nⱼ * (jacobian' + jacobian'')
+    # the minus missed cuz of ln Φᵢ = -ln Cₐᵢ
+    𝔹 .*= nmol .* nmol'
+
+    # 𝔹, adding diagonal term
+    @inbounds for i in eachindex(nmol)
+        y₁ = state[i]      # N'ᵢ / Nᵢ
+        y₂ = 1 - state[i]  # N''ᵢ / Nᵢ
+        𝔹[i, i] += nmol[i] ./ (y₁ * y₂)
+    end
+    # final 𝔹
+    𝔹 .*= RT
 
     #            [ ∂P             ∂P             ]
     # ℂᵢ = -V Nᵢ [ --- (N', V') + --- (N'', V'') ]
@@ -128,17 +190,17 @@ function __vt_flash_hessian!(
     #         [ ∂P            ∂P            ]
     # 𝔻 = -V² [ -- (N', V') + -- (N'', V'') ]
     #         [ ∂V            ∂V            ]
-    __vt_flash_pressure_gradient!(∇P, mix, N₁, V₁, RT)
+    __vt_flash_pressure_gradient!(∇P, mix, N₁, V₁, RT; buf=buf.thermo)
     ℂ = @view hess[1:end-1, end]
     ℂ .= @view ∇P[1:end-1]  # ℂ = (∂P/∂Nᵢ)'
     𝔻 = ∇P[end]  # 𝔻 = (∂P/∂V)'
 
-    __vt_flash_pressure_gradient!(∇P, mix, N₂, V₂, RT)
+    __vt_flash_pressure_gradient!(∇P, mix, N₂, V₂, RT; buf=buf.thermo)
     ℂ .+= @view ∇P[1:end-1]  # ℂ = ∇P' + ∇P''
     ℂ .*= -volume .* nmol  # final ℂ
-    # seems like can be replaced hess[end, :] .= ℂ
-    # but version below seems tracking math for me
-    hess[[end], 1:end-1] .= ℂ'  # ℂᵀ part of hessian
+
+    # hess[[end], 1:end-1] .= ℂ'  # ℂᵀ part of hessian
+    hess[end, 1:end-1] .= ℂ  # seems correct and no allocs
 
     𝔻 += ∇P[end]  # 𝔻 = (∂P/∂V)' + (∂P/∂V)''
     𝔻 *= -volume^2  # final 𝔻
@@ -157,21 +219,26 @@ function vt_flash_closures(
     log_cₐ₁ = Vector{T}(undef, ncomponents(mix))
     log_cₐ₂ = Vector{T}(undef, ncomponents(mix))
 
+    thermo_buf = thermo_buffer(mix)
+
     # calculates once
-    Pbase = pressure(mix, nmol, volume, RT)
+    Pbase = pressure(mix, nmol, volume, RT; buf=thermo_buf)
     log_cₐ_base = Vector{T}(undef, ncomponents(mix))
-    log_c_activity!(log_cₐ_base, mix, nmol, volume, RT)
+    log_c_activity!(log_cₐ_base, mix, nmol, volume, RT; buf=thermo_buf)
 
     "Constant vector for covolume constrain. [Nᵢbᵢ..., -V]"
     covolumes_b̃ = [(c.b for c in components(mix))..., 1]
     covolumes_b̃[1:end-1] .*= nmol
     covolumes_b̃[end] *= -volume
 
+    # for `transform` function
+    Tr_matrix = Diagonal([nmol..., volume])
+    state_tr = Vector{T}(undef, size(Tr_matrix, 1))
+
     "Updates `N₁`, `N₂`. Returns `state_tr`, `V₁`, `V₂` from `state`."
     function transform(state::AbstractVector{T})
-        Tr = Diagonal([nmol..., volume])
-        state_tr = Tr * state
-        N₁ .= state_tr[1:end-1]
+        mul!(state_tr, Tr_matrix, state)
+        N₁ .= @view state_tr[1:end-1]
         N₂ .= nmol .- N₁
         V₁ = state_tr[end]
         V₂ = volume - V₁
@@ -186,6 +253,12 @@ function vt_flash_closures(
                 α = (1 - state[i]) / dir[i]
             elseif dir[i] < 0
                 α = - state[i] / dir[i]
+            else
+                if 0 < state[i] < 1
+                    continue
+                else
+                    error("VTFlash: constrain_step. Zero direction $i, but state[$i] = $(state[i])")
+                end
             end
             if 0 < α < αm
                 αm = α
@@ -218,27 +291,27 @@ function vt_flash_closures(
         if αm == T(Inf)
             error("VTFlash: constrain_step. Step was not found.")
         end
-        return 0.9 * αm
+        return αm
     end
 
     function helmholtz_diff_grad!(state::AbstractVector{T}, grad::AbstractVector{T})
         _, V₁, V₂ = transform(state)
-        log_c_activity!(log_cₐ₁, mix, N₁, V₁, RT)
-        log_c_activity!(log_cₐ₂, mix, N₂, V₂, RT)
+        log_c_activity!(log_cₐ₁, mix, N₁, V₁, RT; buf=thermo_buf)
+        log_c_activity!(log_cₐ₂, mix, N₂, V₂, RT; buf=thermo_buf)
 
         @inbounds for i in 1:length(state)-1
             Δμ = -RT * (log((N₂[i]/V₂) / (N₁[i]/V₁)) - (log_cₐ₁[i] - log_cₐ₂[i]))
             grad[i] = nmol[i] * Δμ
         end
-        P₁ = pressure(mix, N₁, V₁, RT)
-        P₂ = pressure(mix, N₂, V₂, RT)
+        P₁ = pressure(mix, N₁, V₁, RT; buf=thermo_buf)
+        P₂ = pressure(mix, N₂, V₂, RT; buf=thermo_buf)
         grad[end] = volume * (-P₁ + P₂)
         return grad
     end
     function helmholtz_diff!(state::AbstractVector{T}, grad::AbstractVector{T})
         _, V₁, V₂ = transform(state)
 
-        log_c_activity!(log_cₐ₂, mix, N₂, V₂, RT)
+        log_c_activity!(log_cₐ₂, mix, N₂, V₂, RT; buf=thermo_buf)
 
         "Σ Nᵢ (μᵢ - μ₂ᵢ)"
         Ndotμ₂ = zero(T)
@@ -248,13 +321,42 @@ function vt_flash_closures(
             Ndotμ₂ += nmol[i] * Δμ
         end
 
-        P₂ = pressure(mix, N₂, V₂, RT)
+        P₂ = pressure(mix, N₂, V₂, RT; buf=thermo_buf)
         helmholtz_diff_grad!(state, grad)  # overwrites gradient `grad`
         ΔA = dot(grad, state) + (Pbase - P₂) * volume - Ndotμ₂
         @debug "helmholtz_diff!" state=repr(state) ΔA grad=repr(grad) norm(grad, 2)
         return ΔA, grad
     end
     return constrain_step, helmholtz_diff_grad!, helmholtz_diff!
+end
+
+"Find initial state by reducing saturation."
+function __vt_flash_initial_state(
+    mix::BrusilovskyEoSMixture,
+    nmol::AbstractVector,
+    volume::Real,
+    RT::Real,
+    stability_tries::AbstractVector{VTStabilityResult{T}};
+    sat₁max::Real=0.25,
+    steps::Integer=200,
+    step_scale::Real=0.5,
+    helmholtz_thresh::Real=-1e-7,
+) where {T}
+    constrain_step, _, helmholtz_diff! = vt_flash_closures(mix, nmol, volume, RT)
+
+    state = Vector{T}(undef, ncomponents(mix) + 1)
+
+    # choosing concentration with minimum of helmholtz density
+    conc_test = __vt_flash_init_conc_choose(stability_tries)
+
+    init_found = __vt_flash_initial_state!(
+        state, nmol, volume, conc_test, helmholtz_diff!, constrain_step;
+        sat₁max=sat₁max,
+        steps=steps,
+        step_scale=step_scale,
+        helmholtz_thresh=helmholtz_thresh,
+    )
+    return init_found, state
 end
 
 function __vt_flash_initial_state!(
@@ -264,10 +366,10 @@ function __vt_flash_initial_state!(
     conc₁::AbstractVector{T},
     helmholtz_diff!::Function,
     constrain_step::Function;
-    sat₁max::Real=T(0.5),
-    steps::Int=20,
+    sat₁max::Real=T(0.9),
+    steps::Int=200,
     step_scale::Real=T(0.5),
-    helmholtz_thresh::Real=T(-1e-5),  # must be negative value
+    helmholtz_thresh::Real=T(-1e-7),  # must be negative value
 ) where {T}
     state[1:end-1] .= conc₁ * (sat₁max * volume) ./ nmol
     state[end] = sat₁max
@@ -292,7 +394,7 @@ function __vt_flash_initial_state!(
                 return true
             end
         catch e
-            @warn "VTFlash: initial state search" sat e
+            # @warn "VTFlash: initial state search" sat e
         end
 
         # update `scale`
@@ -336,17 +438,49 @@ function __vt_flash_two_phase_result(
         end
     end
 
-    return VTFlashResult{T}(
+    return VTFlashResult{T}(;
             converged=optresult.converged,
             singlephase=false,
             RT=RT,
             nmol_1=nmol₁,
             V_1=V₁,
             nmol_2=nmol₂,
-            V_2=V₂
+            V_2=V₂,
+            iters=optresult.iterations,
+            fcalls=optresult.calls,
     )
 end
 
+"Perform vt_flash from `unstable_state`, so only phase splitting is done."
+function vt_flash(
+    mix::BrusilovskyEoSMixture{T},
+    nmol::AbstractVector,
+    volume::Real,
+    RT::Real,
+    unstable_state::AbstractVector,
+) where {T}
+    state = copy(unstable_state)
+
+    # initial hessian
+    hessian = Matrix{T}(undef, (size(state, 1), size(state, 1)))
+    __vt_flash_hessian!(hessian, state, mix, nmol, volume, RT)
+
+    # create closures for helmoltz energy, its gradient and constrain step
+    constrain_step, _, helmholtz_diff! = vt_flash_closures(mix, nmol, volume, RT)
+
+    # run optimizer
+    optmethod = DescentMethods.CholBFGS(state)
+    DescentMethods.reset!(optmethod, state, hessian)
+    result = DescentMethods.optimize!(optmethod, helmholtz_diff!, state;
+        gtol=1e-3,
+        maxiter=100,
+        constrain_step=constrain_step,
+        reset=false,
+    )
+    return __vt_flash_two_phase_result(mix, nmol, volume, RT, result)
+end
+
+"VT-flash."
 function vt_flash(
     mix::BrusilovskyEoSMixture{T},
     nmol::AbstractVector,
@@ -355,63 +489,32 @@ function vt_flash(
 ) where {T}
     # run vt-stability to find out whether a state single phase or not
     singlephase, vt_stab_tries = vt_stability(mix, nmol, volume, RT)
+
     @debug "VTFlash: VTStability result" singlephase
 
     if singlephase
-        return VTFlashResult{T}(
+        return VTFlashResult{T}(;
             converged=true,
             singlephase=true,
             RT=RT,
             nmol_1=nmol,
             V_1=volume,
             nmol_2=similar(nmol),
-            V_2=0
+            V_2=0,
         )
     end
 
     # two-phase state case
-    # create closures for helmoltz energy, its gradient and constrain step
-    constrain_step, helmholtz_diff_grad!, helmholtz_diff! = vt_flash_closures(
-        mix, nmol, volume, RT
+    init_found, state = __vt_flash_initial_state(
+        mix, nmol, volume, RT, vt_stab_tries
     )
 
-    # find initial vector for optimizer
-    state = Vector{T}(undef, ncomponents(mix) + 1)
-    η₁test = __vt_flash_init_conc_choose(vt_stab_tries)
-
-    init_found = __vt_flash_initial_state!(
-        state, nmol, volume, η₁test, helmholtz_diff!, constrain_step;
-        sat₁max=0.25,
-        steps=200,
-        step_scale=0.5,
-        helmholtz_thresh=-1e-7,
-    )
-
-    @debug "VTFlash: initial state search result" found=init_found state=repr(state) ΔA=helmholtz_diff!(state, similar(state))
+    @debug "VTFlash: initial state search result" found=init_found state=repr(state) ΔA=helmholtz_diff!(state, similar(state))[1]
 
     if !init_found
         @error "VTFlash: Initial state was not found!" mixture=mix nmol=repr(nmol) volume=volume RT=RT
         error("VTFlash: Initial state was not found!")
     end
 
-    # initial hessian
-    hessian = Matrix{T}(undef, (length(state), length(state)))
-    __vt_flash_hessian!(hessian, state, mix, nmol, volume, RT)
-    @debug "VTFlash: initial hessian found" isposdef(hessian)
-
-    # run optimizer
-    optmethod = DescentMethods.CholBFGS(state)
-    DescentMethods.reset!(optmethod, state, hessian)
-    result = DescentMethods.optimize!(
-        optmethod,
-        helmholtz_diff!,
-        state,
-        gtol=1e-3,
-        maxiter=100,
-        constrain_step=constrain_step,
-        reset=false,
-    )
-    # TODO: check convergence of BFGS
-
-    return __vt_flash_two_phase_result(mix, nmol, volume, RT, result)
+    return vt_flash(mix, nmol, volume, RT, state)
 end

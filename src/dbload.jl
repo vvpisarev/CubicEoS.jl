@@ -137,7 +137,7 @@ function load(
     ::Type{<:BrusilovskyEoSMixture};
     names,
     component_dbs = (Data.martinez(), Data.brusilovsky_comp()),
-    mix_eos_db::MixtureDatabase = Data.brusilovsky_mix()
+    mix_eos_db::MixtureDatabase = Data.brusilovsky_mix_adjusted(),
 )
     components = [
         load(

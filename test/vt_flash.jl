@@ -101,8 +101,8 @@ mix = load(
 # T = 440 Kelvins at 5 kmol m⁻³ should correspond to single-phase
 
 V = 1e-6
-N = (7100 * V) .* [0.547413, 0.452587]
-RT = 300 * CubicEoS.GAS_CONSTANT_SI
+N = (5000 * V) .* [0.547413, 0.452587]
+RT = 370 * CubicEoS.GAS_CONSTANT_SI
 
 # closures
 constrain_step, helmholtz_diff_grad!, helmholtz_diff! = CubicEoS.vt_flash_closures(mix, N, V, RT)
@@ -151,5 +151,5 @@ println(stderr, "Concentration from vt_stability ", conc₁)
 # CubicEoS.__vt_flash_hessian!(ℍ, state, mix, N, V, RT)
 # dump(ℍ)
 
-state = vt_flash(mix, N, V, RT)
+state = CubicEoS.vt_flash_newton(mix, N, V, RT)
 dump(state)

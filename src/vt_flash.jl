@@ -12,6 +12,7 @@ struct VTFlashResult{T}
     V_2::T
     iterations::Int
     fcalls::Int
+    state::Vector{T}
 
     function VTFlashResult{T}(
         converged,
@@ -20,9 +21,10 @@ struct VTFlashResult{T}
         nmol_1,
         V_1,
         nmol_2,
-        V_2,
+        V_2;
         iterations=-1,
         fcalls=-1,
+        state,
     ) where {T}
         return new{T}(
             converged,
@@ -34,12 +36,27 @@ struct VTFlashResult{T}
             V_2,
             iterations,
             fcalls,
+            state,
         )
     end
 end
 
-VTFlashResult{T}(; converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2, iters=-1, fcalls=-1) where {T} =
-VTFlashResult{T}(converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2, iters, fcalls)
+VTFlashResult{T}(;
+    converged,
+    singlephase,
+    RT,
+    nmol_1,
+    V_1,
+    nmol_2,
+    V_2,
+    iters=-1,
+    fcalls=-1,
+    state=fill(NaN, length(nmol_1) + 1)) where {T} =
+VTFlashResult{T}(converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2;
+    iterations=iters,
+    fcalls=fcalls,
+    state=state,
+)
 
 "Return concentration of state with minimum energy from vt-stability tries."
 function __vt_flash_init_conc_choose(
@@ -448,6 +465,7 @@ function __vt_flash_two_phase_result(
             V_2=V₂,
             iters=optresult.iterations,
             fcalls=optresult.calls,
+            state=state,
     )
 end
 

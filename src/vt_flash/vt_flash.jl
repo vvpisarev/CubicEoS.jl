@@ -1,3 +1,5 @@
+include("nvt.jl")
+
 #=
 VT-flash algorithm
 =#
@@ -116,7 +118,7 @@ function __vt_flash_pressure_gradient!(
         )
     end
     ∇P[end] = - RT * ΣnmolbyVmB² + AbyDmC * (VpC⁻² - VpD⁻²)
-    return nothing
+    return ∇P
 end
 
 struct HessianBuffer{T<:AbstractFloat}

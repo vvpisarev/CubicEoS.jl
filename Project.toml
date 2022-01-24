@@ -5,7 +5,7 @@ version = "0.1.0"
 
 [deps]
 CubicEoSDatabase = "8742253c-1987-415f-b31d-1ec9670d9ed7"
-DescentMethods = "f4becde8-b16e-4b5a-8f91-16ef0c22c8bc"
+Downhill = "a4c28711-7027-4a57-8564-74545b4697a4"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
 [compat]

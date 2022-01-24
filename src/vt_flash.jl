@@ -404,7 +404,7 @@ function __vt_flash_initial_state!(
 end
 
 """
-Extracts vt-state from `optresult` (DescentMethods obj).
+Extracts vt-state from `optresult` (Downhill obj).
 Sorts variables into gas and liquid.
 Returns corresponding `VTFlashResult`.
 """
@@ -469,9 +469,9 @@ function vt_flash(
     constrain_step, _, helmholtz_diff! = vt_flash_closures(mix, nmol, volume, RT)
 
     # run optimizer
-    optmethod = DescentMethods.CholBFGS(state)
-    DescentMethods.reset!(optmethod, state, hessian)
-    result = DescentMethods.optimize!(optmethod, helmholtz_diff!, state;
+    optmethod = Downhill.CholBFGS(state)
+    Downhill.reset!(optmethod, state, hessian)
+    result = Downhill.optimize!(helmholtz_diff!, optmethod, state;
         gtol=1e-3,
         maxiter=100,
         constrain_step=constrain_step,

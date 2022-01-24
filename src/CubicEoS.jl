@@ -17,7 +17,7 @@ include("dbload.jl")
 include("basic_thermo.jl")
 include("chempotential.jl")
 include("vt_stability.jl")
-include("vt_flash.jl")
+include("vt_flash/vt_flash.jl")
 include("newton.jl")
 
 end # module

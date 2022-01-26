@@ -1,8 +1,10 @@
 """
     nvtgradient!(grad, mix, nmol, volume, RT[; buf])
 
-Gradient of dimensionless [Joules / RT] Helmholtz free energy at `nmol`, `volume` and `RT`.
+Isothermal `grad`ient of dimensionless [Joules / RT] Helmholtz free energy of `mix`ture
+at `nmol`, `volume` and `RT`.
 
+`grad`ient should be column of size nc × 1, where nc is number of components.
 To avoid intermediate allocations, use `buf`, see [`thermo_buffer`](@ref).
 
 # Gradient's structure
@@ -13,6 +15,8 @@ To avoid intermediate allocations, use `buf`, see [`thermo_buffer`](@ref).
 RT
 ```
 where μ is chemical potential and P is pressure.
+
+See also [`nvtgradienthessian!`](@ref).
 """
 function nvtgradient!(
     grad::AbstractVector,
@@ -35,16 +39,13 @@ function nvtgradient!(
 end
 
 """
-    nvtgradienthessian!(grad, hess, mix, nmol, volume, RT[; buf])
+    nvthessian!(hess, mix, nmol, volume, RT[; buf])
 
-Gradient and hessian of dimensionless [Joules / RT] Helmholtz free energy
+Isothermal Hessian of dimensionless [Joules / RT] Helmholtz free energy of `mix`ture
 at `nmol`, `volume` and `RT`.
 
+`hess`ian should be matrix of size (nc + 1) × (nc + 1).
 To avoid intermediate allocations, use `buf`, see [`thermo_buffer`](@ref).
-
-# Gradient's structure
-
-See [`nvtgradient!`](@ref).
 
 # Hessian's structure
 
@@ -53,9 +54,51 @@ See [`nvtgradient!`](@ref).
 | --+-- |  C is column n×1, ∂²a/∂Nᵢ∂V
 | Cᵀ| D |  D is number 1×1, ∂²a/∂V²
 ```
+
+See also [`nvtgradienthessian!`](@ref).
+"""
+function nvthessian!(
+    hess::AbstractMatrix,
+    mix::BrusilovskyEoSMixture,
+    nmol::AbstractVector,
+    volume::Real,
+    RT::Real;
+    buf::BrusilovskyThermoBuffer=thermo_buffer(mix),
+)
+    # Filling B block. Part [C; D] is used as auxiliary
+    aux = @view hess[1:end-1, end]
+    dNdN = @view hess[1:end-1, 1:end-1]
+    aux, dNdN = log_c_activity_wj!(aux, dNdN, mix, nmol, volume, RT; buf=buf)
+    # Adding diagonal term
+    @inbounds for i in eachindex(nmol)
+        dNdN[i, i] += 1 / nmol[i]
+    end
+
+    # Filling [C; D] blocks. It is gradient of pressure, actually
+    dP = @view hess[1:end, end]
+    # dP = [∂P/∂Nᵢ... ∂P/∂V]
+    dP = __vt_flash_pressure_gradient!(dP, mix, nmol, volume, RT; buf=buf)
+    dP ./= -RT  # scale by -1/RT
+    # Copy C to Cᵀ
+    hess[end, 1:end-1] .= hess[1:end-1, end]
+
+    return hess
+end
+
+"""
+    nvtgradienthessian!(grad, hess, mix, nmol, volume, RT[; buf])
+
+Isothermal gradient and hessian of dimensionless [Joules / RT] Helmholtz free energy
+of `mix`ture at `nmol`, `volume` and `RT`.
+
+This version should be faster than
+pair of calls [`nvtgradient!`](@ref), [`nvthessian!`](@ref).
+
+For `grad` and `hess` see [`nvtgradient!`](@ref), [`nvthessian!`](@ref).
+To avoid intermediate allocations, use `buf`, see [`thermo_buffer`](@ref).
 """
 function nvtgradienthessian!(
-    grad::AbstractVector,  # n+1
+    grad::AbstractVector,
     hess::AbstractMatrix,
     mix::BrusilovskyEoSMixture,
     nmol::AbstractVector,
@@ -68,16 +111,11 @@ function nvtgradienthessian!(
 
     ## Second partial derivatives by (nmolᵢ and volume)
     ## Simultaneously, second partial derivate by volume
-    aux = grad
-    aux = __vt_flash_pressure_gradient!(aux, mix, nmol, volume, RT; buf=buf)
+    dP = @view hess[1:end, end]
+    dP = __vt_flash_pressure_gradient!(dP, mix, nmol, volume, RT; buf=buf)
 
-    dPdN = @view aux[1:end-1]
-    dPdV = aux[end]
-
-    hess[1:end-1, end] .= .- dPdN ./ RT
+    hess[1:end, end] ./= -RT
     hess[end, 1:end-1] .= hess[1:end-1, end]  # Symmetric
-
-    hess[end, end] = -1 * dPdV / RT  # d²a / dV²
 
     ## Second partial derivatives by (nmolᵢ and nmolⱼ)
     dNdN = @view hess[1:end-1, 1:end-1]
@@ -96,7 +134,7 @@ function nvtgradienthessian!(
     dN .-= log(volume)
 
     ## Partial derivative by volume, -P/RT
-    grad[end] = .- pressure(mix, nmol, volume, RT; buf=buf) / RT
+    grad[end] = -pressure(mix, nmol, volume, RT; buf=buf) / RT
 
     return grad, hess
 end

@@ -1,11 +1,186 @@
-include("nvt.jl")
 include("types.jl")
+include("nvt.jl")
+include("state_physical.jl")
 
 #=
 VT-flash algorithm
 =#
 
-struct VTFlashResult{T}
+"VT-flash."
+function vt_flash(
+    mix::BrusilovskyEoSMixture,
+    nmol::AbstractVector,
+    volume::Real,
+    RT::Real,
+    StateVariables::Type{<:AbstractVTFlashState},
+)
+    singlephase, stability_tries = vt_stability(mix, nmol, volume, RT)
+
+    singlephase && return __vt_flash_single_phase_result(nmol, volume, RT)
+
+    concentration = __vt_flash_init_conc_choose(stability_tries)
+    saturation = __find_saturation_negative_helmdiff(mix, nmol, volume, RT, concentration;
+        maxsaturation=0.25,
+        maxiter=50,
+        scale=0.5,
+        helmdifftol=-1e-10,  # -1e-7/RT, where -1e-7 is old tolerance
+    )
+
+    if isnan(saturation)
+        @error "VTFlash: Initial state was not found!" mixture=mix nmol=repr(nmol) volume=volume RT=RT
+        error("VTFlash: Initial state was not found!")
+    end
+
+    state = StateVariables(concentration, saturation, nmol, volume)
+
+    return vt_flash!(state, mix, nmol, volume, RT; gtol=1e-6, maxiter=100)
+end
+
+function vt_flash!(
+    unstable_state::AbstractVTFlashState,
+    mix::BrusilovskyEoSMixture,
+    nmol::AbstractVector,
+    volume::Real,
+    RT::Real;
+    gtol::Real=1e-3,
+    maxiter::Int=100,
+)
+    state = unstable_state
+    statex = value(state)
+
+    # initial hessian
+    hessian = Matrix{Float64}(undef, (size(statex, 1), size(statex, 1)))
+    hessian = hessian!(hessian, state, mix, nmol, volume, RT)
+
+    constrain_step, helmgrad!, helmdiff! = __vt_flash_optim_closures(
+        state, mix, nmol, volume, RT
+    )
+
+    # run optimize
+    optmethod = Downhill.CholBFGS(statex)
+    Downhill.reset!(optmethod, statex, hessian)
+    optimresult = Downhill.optimize!(helmdiff!, optmethod, statex;
+        gtol=gtol,
+        maxiter=maxiter,
+        constrain_step=constrain_step,
+        reset=false,
+    )
+    statex .= optimresult.argument
+
+    return __vt_flash_two_phase_result(state, mix, nmol, volume, RT, optimresult)
+end
+
+function __vt_flash_single_phase_result(nmol::AbstractVector, volume::Real, RT::Real)
+    return VTFlashResult(;
+            converged=true,
+            singlephase=true,
+            RT=RT,
+            nmol_1=nmol,
+            V_1=volume,
+            nmol_2=similar(nmol),
+            V_2=0,
+    )
+end
+
+function __find_saturation_negative_helmdiff(
+    mix::BrusilovskyEoSMixture,
+    nmolb::AbstractVector,
+    volumeb::Real,
+    RT::Real,
+    concentration::AbstractVector;
+    maxsaturation::Real,
+    maxiter::Int,
+    scale::Real,
+    helmdifftol::Real,
+    thermo_buf::BrusilovskyThermoBuffer=thermo_buffer(mix),
+)
+    # Δa = a' + a'' - abase
+    abase = helmholtz(mix, nmolb, volumeb, RT; buf=thermo_buf)
+
+    nmol1 = similar(nmolb, Float64)
+    nmol2 = similar(nmolb, Float64)
+
+    function helmdiff(saturation::Real)
+        volume1 = volumeb * saturation
+        @. nmol1 = volume1 * concentration
+        a1 = helmholtz(mix, nmol1, volume1, RT; buf=thermo_buf)
+
+        volume2 = volumeb - volume1
+        @. nmol2 = nmolb - nmol1
+        a2 = helmholtz(mix, nmol2, volume2, RT; buf=thermo_buf)
+        return (a1 + a2) - abase
+    end
+
+    saturation = float(maxsaturation)
+    for i in 1:maxiter
+        try
+            Δa = helmdiff(saturation)
+            Δa < - abs(helmdifftol) && return saturation
+        catch e
+            isa(e, UndefVarError) && throw(e)  # syntax
+        end
+        saturation *= scale
+    end
+    return NaN
+end
+
+function __sort_phases!(mix, nmol₁, V₁, nmol₂, V₂, RT)
+    P₁ = pressure(mix, nmol₁, V₁, RT)  # they should be equal
+    P₂ = pressure(mix, nmol₂, V₂, RT)
+
+    Z₁ = P₁ * V₁ / (sum(nmol₁) * RT)  # seems can be reduced to Vᵢ / sum(nmolᵢ)
+    Z₂ = P₂ * V₂ / (sum(nmol₂) * RT)
+
+    if Z₂ > Z₁  # □₂ is gas state, need exchange
+        P₁, P₂ = P₂, P₁
+        Z₁, Z₂ = Z₂, Z₁
+        V₁, V₂ = V₂, V₁
+
+        for i in eachindex(nmol₁, nmol₂)
+            nmol₁[i], nmol₂[i] = nmol₂[i], nmol₁[i]
+        end
+    end
+    return nmol₁, V₁, nmol₂, V₂
+end
+
+"""
+Extracts vt-state from `optresult` (Downhill obj).
+Sorts variables into gas and liquid.
+Returns corresponding `VTFlashResult`.
+"""
+function __vt_flash_two_phase_result(
+    state::S,
+    mix::BrusilovskyEoSMixture{T},
+    nmol::AbstractVector{T},
+    volume::Real,
+    RT::Real,
+    optresult,
+) where {T, S<:AbstractVTFlashState}
+    # □₁ for gas, □₂ for liquid
+    nmol1, volume1 = nmolvol(state, nmol, volume)
+
+    nmol2 = nmol .- nmol1
+    volume2 = volume - volume1
+
+    nmolgas, volgas, nmolliq, volliq = __sort_phases!(mix, nmol1, volume1, nmol2, volume2, RT)
+
+    return VTFlashResult{T, S}(;
+            converged=optresult.converged,
+            singlephase=false,
+            RT=RT,
+            nmol_1=nmolgas,
+            V_1=volgas,
+            nmol_2=nmolliq,
+            V_2=volliq,
+            iters=optresult.iterations,
+            fcalls=optresult.calls,
+            state=state,
+    )
+end
+
+#= OLD CODE GOES DOWN =#
+
+struct VTFlashResult{T, S}
     converged::Bool
     singlephase::Bool
     RT::T
@@ -15,21 +190,14 @@ struct VTFlashResult{T}
     V_2::T
     iterations::Int
     fcalls::Int
-    state::Vector{T}
+    state::S
 
-    function VTFlashResult{T}(
-        converged,
-        singlephase,
-        RT,
-        nmol_1,
-        V_1,
-        nmol_2,
-        V_2;
+    function VTFlashResult{T, S}(converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2;
         iterations=-1,
         fcalls=-1,
         state,
-    ) where {T}
-        return new{T}(
+    ) where {T, S}
+        return new{T, S}(
             converged,
             singlephase,
             RT,
@@ -44,7 +212,7 @@ struct VTFlashResult{T}
     end
 end
 
-VTFlashResult{T}(;
+VTFlashResult{T, S}(;
     converged,
     singlephase,
     RT,
@@ -54,8 +222,8 @@ VTFlashResult{T}(;
     V_2,
     iters=-1,
     fcalls=-1,
-    state=fill(NaN, length(nmol_1) + 1)) where {T} =
-VTFlashResult{T}(converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2;
+    state=fill(NaN, length(nmol_1) + 1)) where {T, S} =
+VTFlashResult{T, S}(converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2;
     iterations=iters,
     fcalls=fcalls,
     state=state,
@@ -396,23 +564,9 @@ function __vt_flash_two_phase_result(
     nmol₂ = nmol .- nmol₁
     V₂ = volume - V₁
 
-    P₁ = pressure(mix, nmol₁, V₁, RT)  # they should be equal
-    P₂ = pressure(mix, nmol₂, V₂, RT)
+    nmol₁, V₁, nmol₂, V₂ = __sort_phases!(mix, nmol₁, V₁, nmol₂, V₂, RT)
 
-    Z₁ = P₁ * V₁ / (sum(nmol₁) * RT)  # seems can be reduced to Vᵢ / sum(nmolᵢ)
-    Z₂ = P₂ * V₂ / (sum(nmol₂) * RT)
-
-    if Z₂ > Z₁  # □₂ is gas state, need exchange
-        P₁, P₂ = P₂, P₁
-        Z₁, Z₂ = Z₂, Z₁
-        V₁, V₂ = V₂, V₁
-
-        for i in eachindex(nmol₁, nmol₂)
-            nmol₁[i], nmol₂[i] = nmol₂[i], nmol₁[i]
-        end
-    end
-
-    return VTFlashResult{T}(;
+    return VTFlashResult{T, typeof(state)}(;
             converged=optresult.converged,
             singlephase=false,
             RT=RT,
@@ -455,6 +609,7 @@ function vt_flash(
     return __vt_flash_two_phase_result(mix, nmol, volume, RT, result)
 end
 
+#= depr =#
 "VT-flash."
 function vt_flash(
     mix::BrusilovskyEoSMixture{T},

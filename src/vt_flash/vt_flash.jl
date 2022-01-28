@@ -75,10 +75,10 @@ function __vt_flash_single_phase_result(nmol::AbstractVector, volume::Real, RT::
             converged=true,
             singlephase=true,
             RT=RT,
-            nmol_1=nmol,
-            V_1=volume,
-            nmol_2=similar(nmol),
-            V_2=0,
+            nmolgas=nmol,
+            volumegas=volume,
+            nmolliq=similar(nmol),
+            volumeliq=0,
     )
 end
 
@@ -168,66 +168,66 @@ function __vt_flash_two_phase_result(
             converged=optresult.converged,
             singlephase=false,
             RT=RT,
-            nmol_1=nmolgas,
-            V_1=volgas,
-            nmol_2=nmolliq,
-            V_2=volliq,
-            iters=optresult.iterations,
-            fcalls=optresult.calls,
+            nmolgas=nmolgas,
+            volumegas=volgas,
+            nmolliq=nmolliq,
+            volumeliq=volliq,
             state=state,
+            iters=optresult.iterations,
+            calls=optresult.calls,
     )
 end
 
 #= OLD CODE GOES DOWN =#
 
-struct VTFlashResult{T, S}
-    converged::Bool
-    singlephase::Bool
-    RT::T
-    nmol_1::Vector{T}
-    V_1::T
-    nmol_2::Vector{T}
-    V_2::T
-    iterations::Int
-    fcalls::Int
-    state::S
+# struct VTFlashResult{T, S}
+#     converged::Bool
+#     singlephase::Bool
+#     RT::T
+#     nmol_1::Vector{T}
+#     V_1::T
+#     nmol_2::Vector{T}
+#     V_2::T
+#     iterations::Int
+#     fcalls::Int
+#     state::S
 
-    function VTFlashResult{T, S}(converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2;
-        iterations=-1,
-        fcalls=-1,
-        state,
-    ) where {T, S}
-        return new{T, S}(
-            converged,
-            singlephase,
-            RT,
-            copy(nmol_1),
-            V_1,
-            copy(nmol_2),
-            V_2,
-            iterations,
-            fcalls,
-            state,
-        )
-    end
-end
+#     function VTFlashResult{T, S}(converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2;
+#         iterations=-1,
+#         fcalls=-1,
+#         state,
+#     ) where {T, S}
+#         return new{T, S}(
+#             converged,
+#             singlephase,
+#             RT,
+#             copy(nmol_1),
+#             V_1,
+#             copy(nmol_2),
+#             V_2,
+#             iterations,
+#             fcalls,
+#             state,
+#         )
+#     end
+# end
 
-VTFlashResult{T, S}(;
-    converged,
-    singlephase,
-    RT,
-    nmol_1,
-    V_1,
-    nmol_2,
-    V_2,
-    iters=-1,
-    fcalls=-1,
-    state=fill(NaN, length(nmol_1) + 1)) where {T, S} =
-VTFlashResult{T, S}(converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2;
-    iterations=iters,
-    fcalls=fcalls,
-    state=state,
-)
+# VTFlashResult{T, S}(;
+#     converged,
+#     singlephase,
+#     RT,
+#     nmol_1,
+#     V_1,
+#     nmol_2,
+#     V_2,
+#     iters=-1,
+#     fcalls=-1,
+#     state=fill(NaN, length(nmol_1) + 1)) where {T, S} =
+# VTFlashResult{T, S}(converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2;
+#     iterations=iters,
+#     fcalls=fcalls,
+#     state=state,
+# )
 
 "Return concentration of state with minimum energy from vt-stability tries."
 function __vt_flash_init_conc_choose(
@@ -570,12 +570,12 @@ function __vt_flash_two_phase_result(
             converged=optresult.converged,
             singlephase=false,
             RT=RT,
-            nmol_1=nmol₁,
-            V_1=V₁,
-            nmol_2=nmol₂,
-            V_2=V₂,
+            nmolgas=nmol₁,
+            volumegas=V₁,
+            nmolliq=nmol₂,
+            volumeliq=V₂,
             iters=optresult.iterations,
-            fcalls=optresult.calls,
+            calls=optresult.calls,
             state=state,
     )
 end

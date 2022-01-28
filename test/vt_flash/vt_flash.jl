@@ -7,5 +7,5 @@
     RT = CubicEoS.GAS_CONSTANT_SI * 371
 
     # Just works test
-    @test vt_flash(mixture, nmol, volume, RT).converged
+    @test converged(vt_flash(mixture, nmol, volume, RT))
 end

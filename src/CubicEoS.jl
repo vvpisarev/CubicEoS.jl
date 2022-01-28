@@ -7,6 +7,7 @@ export ncomponents, pressure, wilson_saturation_pressure, compressibility
 export log_c_activity!, log_c_activity, log_c_activity_wj!, log_c_activity_wj
 export vt_stability, vt_stability_buffer
 export vt_flash, vt_flash_newton
+export converged
 
 using Downhill
 

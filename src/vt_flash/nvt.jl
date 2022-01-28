@@ -1,4 +1,28 @@
 """
+    helmholtz(mix, nmol, volume, RT[; buf])
+
+Dimensionless Helmholtz free energy [Joules / RT] of `mix`ture
+at `nmol`, `volume` and `RT`.
+
+To reduce intermediate allocations, use `buf`, see [`thermo_buffer`](@ref).
+"""
+function helmholtz(
+    mix::BrusilovskyEoSMixture,
+    nmol::AbstractVector,
+    volume::Real,
+    RT::Real;
+    buf::BrusilovskyThermoBuffer=thermo_buffer(mix),
+)
+    # helmholtz = dot([nmol; V]ᵀ, grad)
+
+    grad = similar(nmol, Float64, length(nmol) + 1)
+    grad = nvtgradient!(grad, mix, nmol, volume, RT; buf=buf)
+    grad[1:end-1] .*= nmol
+    grad[end] *= volume
+    return sum(grad)
+end
+
+"""
     nvtgradient!(grad, mix, nmol, volume, RT[; buf])
 
 Isothermal `grad`ient of dimensionless [Joules / RT] Helmholtz free energy of `mix`ture

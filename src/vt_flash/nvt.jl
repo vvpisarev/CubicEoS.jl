@@ -77,7 +77,7 @@ function nvthessian!(
     # Filling [C; D] blocks. It is gradient of pressure, actually
     dP = @view hess[1:end, end]
     # dP = [∂P/∂Nᵢ... ∂P/∂V]
-    dP = __vt_flash_pressure_gradient!(dP, mix, nmol, volume, RT; buf=buf)
+    dP = vtpressuregradient!(dP, mix, nmol, volume, RT; buf=buf)
     dP ./= -RT  # scale by -1/RT
     # Copy C to Cᵀ
     hess[end, 1:end-1] .= hess[1:end-1, end]
@@ -112,7 +112,7 @@ function nvtgradienthessian!(
     ## Second partial derivatives by (nmolᵢ and volume)
     ## Simultaneously, second partial derivate by volume
     dP = @view hess[1:end, end]
-    dP = __vt_flash_pressure_gradient!(dP, mix, nmol, volume, RT; buf=buf)
+    dP = vtpressuregradient!(dP, mix, nmol, volume, RT; buf=buf)
 
     hess[1:end, end] ./= -RT
     hess[end, 1:end-1] .= hess[1:end-1, end]  # Symmetric
@@ -137,4 +137,62 @@ function nvtgradienthessian!(
     grad[end] = -pressure(mix, nmol, volume, RT; buf=buf) / RT
 
     return grad, hess
+end
+
+"""
+    vtpressuregradient!(grad, mix, nmol, volume, RT[, buf])
+
+Pressure `grad`ient at point `[nmol...; volume]` and `RT`.
+To avoid intermediate allocations, use `buf`, see [`thermo_buffer`](@ref).
+
+*The gradient does not include ∂P/∂T.*
+
+# Gradient's structure
+
+```
+[∂P/∂N₁, ..., ∂P/∂Nₙ, ∂P/∂V]
+```
+
+where `n` is number of components in `mix`ture.
+"""
+function vtpressuregradient!(
+    ∇P::AbstractVector{T},
+    mix::BrusilovskyEoSMixture{T},
+    nmol::AbstractVector,
+    volume::Real,
+    RT::Real;
+    buf::BrusilovskyThermoBuffer=thermo_buffer(mix),
+) where {T}
+    # I did not implement this function in src/basic_thermo.jl
+    # because the gradient here does not include ∂P/∂T derivative.
+    # Maybe, it should be implemented later in src/basic_thermo.jl.
+
+    A, B, C, D, aij = eos_parameters(mix, nmol, RT; buf=buf)
+
+    # hell arithmetics
+    # does compiler smart to detect this as constants
+    # if plain operation were put in ∂P/∂Nᵢ for-cycle explicitly?
+    V = volume  # alias
+    VmB⁻¹ = 1 / (V - B)
+    ΣnmolbyVmB² = sum(nmol) * VmB⁻¹^2
+    DmC = D - C
+    VpC⁻¹ = 1 / (V + C)
+    VpC⁻² = VpC⁻¹^2
+    VpD⁻¹ = 1 / (V + D)
+    VpD⁻² = VpD⁻¹^2
+    AbyDmC = A / DmC
+    VpC⁻¹mVpD⁻¹byDmC² = (VpC⁻¹ - VpD⁻¹) / DmC^2
+
+    # ∂P/∂Nᵢ part
+    for (i, substance) in enumerate(components(mix))
+        bᵢ, cᵢ, dᵢ = substance.b, substance.c, substance.d
+        ∂ᵢA = 2 * dot(nmol, @view aij[i, :])  # ∂A/∂Nᵢ
+
+        ∇P[i] = RT * (VmB⁻¹ + bᵢ * ΣnmolbyVmB²) - (
+            (∂ᵢA * DmC - A * (dᵢ - cᵢ)) * VpC⁻¹mVpD⁻¹byDmC²
+            + AbyDmC * (-cᵢ * VpC⁻² + dᵢ * VpD⁻²)
+        )
+    end
+    ∇P[end] = - RT * ΣnmolbyVmB² + AbyDmC * (VpC⁻² - VpD⁻²)
+    return ∇P
 end

@@ -87,6 +87,7 @@ function log_c_activity!(
     nc = ncomponents(mix)
     ∑mol = sum(nmol)
 
+    comp = components(mix)
     # коэффициенты вычислены для состава в [моль]
     A, B, C, D, aij = eos_parameters(mix, nmol, RT; buf = buf)
 
@@ -100,12 +101,7 @@ function log_c_activity!(
     AbyRTCmD = A / (RT * CmD)
     log_VpCbyVpD = log(VpC / VpD)
 
-    @inbounds for i in 1:nc
-        subst = mix.components[i]
-        b = subst.b
-        c = subst.c
-        d = subst.d
-
+    @inbounds for (i, b, c, d) in zip(1:nc, comp.b, comp.c, comp.d)
         # ∂A_i = 2 ∑_j (N_j * a_ij)
         # прежний код использовал sum( генератор с for in eachindex ) - давал 2 аллокации
         ∂A = 2 * dot(nmol, @view aij[:,i])
@@ -216,6 +212,7 @@ function __log_c_activity_wj_impl__(
 
     aux1 = buf.vec1
     aux2 = buf.vec2
+    comp = components(mix)
     nc = ncomponents(mix)
     V = volume
     ntotal = sum(nmol)
@@ -228,33 +225,24 @@ function __log_c_activity_wj_impl__(
     log_VmBbyV = log(VmB/volume)
     AbyRTCmD = A / (RT * CmD)
     log_VpCbyVpD = log(VpC / VpD)
-    log2 = log1p(CmD / (V + D)) / (RT * CmD)
+    log2 = 2 * log1p(CmD / (V + D)) / (RT * CmD)
 
-    @inbounds map!(aux1, 1:nc) do i
-        mix[i].b / VmB
-    end
+    aux1 .= comp.b ./ VmB
+
     log_ca .= aux1 .* ntotal .- log_VmBbyV
     jacobian .= aux1 .+ aux1' .+ ntotal .* aux1 .* aux1'
     mul!(aux1, aij, nmol)
-    @inbounds map!(aux2, 1:nc) do i
-        mix[i].c - mix[i].d
-    end
+    aux2 .= comp.c .- comp.d
     log_ca .-= AbyRTCmD .* log_VpCbyVpD .* (2 .* aux1 ./ A .- aux2 ./ CmD)
-    jacobian .-= (2 * log2) .* ((A / CmD^2) .* aux2 .* aux2' .+ aij)
-    jacobian .+= (2 * log2 / CmD) .* (aux2 .* aux1' .+ aux1 .* aux2')
+    jacobian .-= log2 .* ((A / CmD^2) .* aux2 .* aux2' .+ aij)
+    jacobian .+= (log2 / CmD) .* (aux2 .* aux1' .+ aux1 .* aux2')
 
     aux1 .= 2 .* aux1 ./ (RT * CmD) .- aux2 .* (A / (RT * CmD^2))
-    @inbounds map!(aux2, 1:nc) do i
-        mix[i].c / VpC - mix[i].d / VpD
-    end
+    aux2 .= comp.c ./ VpC .- comp.d ./ VpD
     log_ca .-= AbyRTCmD .* aux2
     jacobian .-= aux1 .* aux2'.+ aux2 .* aux1'
-    @inbounds map!(aux1, 1:nc) do i
-        mix[i].d / VpD
-    end
-    @inbounds map!(aux2, 1:nc) do i
-        mix[i].c / VpC
-    end
+    aux1 .= comp.d ./ VpD
+    aux2 .= comp.c ./ VpC
 
     jacobian .-= AbyRTCmD .* (aux1 .* aux1' .- aux2 .* aux2')
     return log_ca, jacobian

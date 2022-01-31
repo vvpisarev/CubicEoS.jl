@@ -19,4 +19,6 @@ end
     include("chempotential.jl")
     include("solvecubic.jl")
     include("newton.jl")
+    include("vt_flash/vt_flash.jl")
+    include("vt_flash/nvt.jl")
 end

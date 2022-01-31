@@ -140,6 +140,7 @@ function __sort_phases!(mix, nmol₁, V₁, nmol₂, V₂, RT)
             nmol₁[i], nmol₂[i] = nmol₂[i], nmol₁[i]
         end
     end
+    # now □₁ is gas, □₂ is liquid
     return nmol₁, V₁, nmol₂, V₂
 end
 
@@ -156,7 +157,6 @@ function __vt_flash_two_phase_result(
     RT::Real,
     optresult,
 ) where {T, S<:AbstractVTFlashState}
-    # □₁ for gas, □₂ for liquid
     nmol1, volume1 = nmolvol(state, nmol, volume)
 
     nmol2 = nmol .- nmol1
@@ -179,55 +179,6 @@ function __vt_flash_two_phase_result(
 end
 
 #= OLD CODE GOES DOWN =#
-
-# struct VTFlashResult{T, S}
-#     converged::Bool
-#     singlephase::Bool
-#     RT::T
-#     nmol_1::Vector{T}
-#     V_1::T
-#     nmol_2::Vector{T}
-#     V_2::T
-#     iterations::Int
-#     fcalls::Int
-#     state::S
-
-#     function VTFlashResult{T, S}(converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2;
-#         iterations=-1,
-#         fcalls=-1,
-#         state,
-#     ) where {T, S}
-#         return new{T, S}(
-#             converged,
-#             singlephase,
-#             RT,
-#             copy(nmol_1),
-#             V_1,
-#             copy(nmol_2),
-#             V_2,
-#             iterations,
-#             fcalls,
-#             state,
-#         )
-#     end
-# end
-
-# VTFlashResult{T, S}(;
-#     converged,
-#     singlephase,
-#     RT,
-#     nmol_1,
-#     V_1,
-#     nmol_2,
-#     V_2,
-#     iters=-1,
-#     fcalls=-1,
-#     state=fill(NaN, length(nmol_1) + 1)) where {T, S} =
-# VTFlashResult{T, S}(converged, singlephase, RT, nmol_1, V_1, nmol_2, V_2;
-#     iterations=iters,
-#     fcalls=fcalls,
-#     state=state,
-# )
 
 "Return concentration of state with minimum energy from vt-stability tries."
 function __vt_flash_init_conc_choose(

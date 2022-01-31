@@ -1,3 +1,5 @@
+using StructArrays
+
 abstract type AbstractEoSComponent end
 
 abstract type AbstractEoSMixture end
@@ -72,7 +74,7 @@ Mixture
 =#
 
 struct BrusilovskyEoSMixture{T} <: AbstractEoSMixture
-    components::Vector{BrusilovskyEoSComponent{T}}
+    components::StructVector{BrusilovskyEoSComponent{T}}
 
     eij::Matrix{T} # constant  thermal binary interaction coefficient
     gij::Matrix{T} # linear    thermal binary interaction coefficient
@@ -86,7 +88,7 @@ struct BrusilovskyEoSMixture{T} <: AbstractEoSMixture
         quadratic::AbstractMatrix,
         kw...
     ) where {T}
-        new{T}(components, constant, linear, quadratic)
+        new{T}(StructVector(components), constant, linear, quadratic)
     end
 end
 

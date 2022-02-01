@@ -32,13 +32,14 @@ See (Jirí Mikyska, Abbas Firoozabadi // 10.1002/aic.12387)
 See also: [`log_c_activity!`](@ref), [`log_c_activity_wj`](@ref), [`log_c_activity_wj!`](@ref)
 """
 function log_c_activity(
-    mix::BrusilovskyEoSMixture{T},
-    nmol::AbstractVector,
-    volume::Real,
-    RT::Real;
+    mix::BrusilovskyEoSMixture{Tmix},
+    nmol::AbstractVector{Tmol},
+    volume::Tvol,
+    RT::Ttemp;
     buf = NamedTuple(),
-) where {T}
+) where {Tmix, Tmol, Tvol, Ttemp}
 
+    T = promote_type(Tmix, Tmol, Tvol, Ttemp)
     nc = ncomponents(mix)
     log_ca = Vector{T}(undef, nc)
 

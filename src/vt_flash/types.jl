@@ -1,3 +1,12 @@
+"""
+    AbstractVTFlashState(x)
+    AbstractVTFlashState(concentration, saturation, nmolb, volumeb)
+
+Abstract type for representation of thermodynamic NVT-state in certain variables `x`.
+
+Second constructor uses concentration and saturation of a phase and
+moles and volume of base phase.
+"""
 abstract type AbstractVTFlashState end
 
 """
@@ -14,6 +23,8 @@ Moles [mol] and volume [m³] of a phase at `s`tate.
 Moles `nmolb` and `volumeb` relate to base state.
 """
 nmolvol(s::AbstractVTFlashState, nmolb, volumeb) = error("NotImplemented")
+
+(::Type{<:AbstractVTFlashState})(concentration, saturation, nmolb, volumeb) = error("NotImplemented")
 
 struct VTFlashOptimStats
     converged::Bool

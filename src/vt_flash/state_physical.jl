@@ -8,12 +8,6 @@ end
 
 nmolvol(s::PhysicalState, nmolb::AbstractVector, volumeb::Real) = (s.x[1:end-1], s.x[end])
 
-"""
-    PhysicalState(concentration, saturation, nmolb, volumeb)
-
-Construct `PhysicalState` from phase's `concentration`, `saturation` and
-base phase `nmolb` moles and `volumeb`.
-"""
 function PhysicalState(
     concentration::AbstractVector,
     saturation::Real,

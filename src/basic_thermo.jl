@@ -157,18 +157,18 @@ function __eos_parameters_impl__(
     ai, aij = auxv, auxm
 
     comp = mixture.components
-    ai .= a_coef.(comp, RT)
+    psi = comp.Psi
+    ac = comp.ac
+    @. ai = ac * (1 + psi * (1 - sqrt(RT / comp.RTc)) )^2
 
-    Bm = Cm = Dm = zero(T)
-    @inbounds for i in eachindex(nmol, comp)
-        Bm += nmol[i] * comp[i].b
-        Cm += nmol[i] * comp[i].c
-        Dm += nmol[i] * comp[i].d
-    end
+    bi, ci, di = comp.b, comp.c, comp.d
+    Bm = dot(nmol, bi)
+    Cm = dot(nmol, ci)
+    Dm = dot(nmol, di)
 
-    temp = RT / GAS_CONSTANT_SI - 273.16
+    tempC = RT / GAS_CONSTANT_SI - 273.16
     eij, gij, hij = mixture.eij, mixture.gij, mixture.hij
-    aij .= (one(T) .- (eij .+ temp .* (gij .+ temp .* hij))) .* sqrt.(ai .* ai')
+    aij .= (one(T) .- (eij .+ tempC .* (gij .+ tempC .* hij))) .* sqrt.(ai .* ai')
     Am = dot(nmol, aij, nmol)  # Am = nmolᵀ aij nmol
     return Am, Bm, Cm, Dm, aij
 end

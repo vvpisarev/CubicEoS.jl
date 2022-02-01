@@ -96,6 +96,7 @@ function __vt_flash_optim_closures(
     statebxdotcov = dot(statebx, covolumes)
 
     function clsr_constrain_step(x::AbstractVector, dir::AbstractVector)
+        state1x .= x
         α = Inf
         # Finding upper limit
         ## Non-negativness: 0 < x[i] + α dir[i] < statexb[i]

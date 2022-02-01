@@ -102,7 +102,7 @@ function __vt_flash_optim_closures(
         ## Non-negativness: 0 < x[i] + α dir[i] < statexb[i]
         @inbounds for i in eachindex(x)
             if iszero(dir[i]) && !(0 < x[i] < statebx[i])
-                error("VTFlash: constrain_step. Zero direction $i, but state[$i] = $(x[i])")
+                throw(ConstrainStepZeroDirectionError(i, x[i]))
             end
             if dir[i] < 0
                 α = min(α, -x[i]/dir[i])
@@ -139,7 +139,7 @@ function __vt_flash_optim_closures(
         end
 
         # Is max α upper than lower limit?
-        α ≤ αlo && error("VTFlash: constrain_step. Lower bound not meet.")
+        α ≤ αlo && throw(ConstrainStepLowerBoundError(x, dir))
 
         return α
     end

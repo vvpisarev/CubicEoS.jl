@@ -1,5 +1,7 @@
 #=
 Flash based on physical variables: moles [mol] and volume [m³] of a phase.
+
+state = [N'₁, ..., N'ₙ, V']
 =#
 
 struct PhysicalState{V<:AbstractVector} <: AbstractVTFlashState

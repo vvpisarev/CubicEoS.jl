@@ -1,6 +1,7 @@
 include("types.jl")
 include("nvt.jl")
 include("state_physical.jl")
+include("state_ratio.jl")
 
 #=
 VT-flash algorithm

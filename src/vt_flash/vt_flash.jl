@@ -13,7 +13,9 @@ function vt_flash(
     nmol::AbstractVector,
     volume::Real,
     RT::Real,
-    StateVariables::Type{<:AbstractVTFlashState},
+    StateVariables::Type{<:AbstractVTFlashState};
+    gtol::Real=1e-6,
+    maxiter::Int=100,
 )
     singlephase, stability_tries = vt_stability(mix, nmol, volume, RT)
 

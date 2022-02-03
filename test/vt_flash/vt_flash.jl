@@ -40,5 +40,8 @@
         for (r1, r2) in zip(results[1:end-1], results[2:end])
             compare(r1, r2)
         end
+        for (rbfgs, rnewt) in zip(resultbfgs, resultnewton)
+            @test CubicEoS.value(rbfgs.state) ≈ CubicEoS.value(rnewt.state) rtol=1e-5
+        end
     end
 end

@@ -317,7 +317,7 @@ function __vt_flash_hessian!(
     𝔻 += ∇P[end]  # 𝔻 = (∂P/∂V)' + (∂P/∂V)''
     𝔻 *= -volume^2  # final 𝔻
     hess[end, end] = 𝔻
-    return nothing
+    return hess
 end
 
 function vt_flash_closures(
@@ -562,7 +562,7 @@ function vt_flash(
 
     # initial hessian
     hessian = Matrix{T}(undef, (size(state, 1), size(state, 1)))
-    __vt_flash_hessian!(hessian, state, mix, nmol, volume, RT)
+    hessian = __vt_flash_hessian!(hessian, state, mix, nmol, volume, RT)
 
     # create closures for helmoltz energy, its gradient and constrain step
     constrain_step, _, helmholtz_diff! = vt_flash_closures(mix, nmol, volume, RT)

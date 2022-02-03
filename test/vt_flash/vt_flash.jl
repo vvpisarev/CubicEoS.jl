@@ -23,9 +23,14 @@
     end
 
     @testset "Equality of approaches" begin
-        results = map(StateTypes) do ST
+        resultbfgs = map(StateTypes) do ST
             vt_flash(mix, nmol, volume, RT, ST; gtol=1e-5/RT)
         end
+        resultnewton = map(StateTypes) do ST
+            vt_flash_newton(mix, nmol, volume, RT, ST; gtol=1e-5/RT)
+        end
+        results = tuple(resultbfgs..., resultnewton...)
+
         function compare(x, y)
             @test x.nmolgas ≈ y.nmolgas rtol=1e-5
             @test x.volumegas ≈ y.volumegas rtol=1e-5

@@ -138,7 +138,7 @@ function __vt_flash_optim_closures(
 
     function clsr_gradient!(grad::AbstractVector, x::AbstractVector)
         state1x .= x
-        grad = gradient!(grad, state1, mix, nmolb, volumeb, RT; buf=thermo_buf)
+        grad = gradient!(grad, state1, mix, nmolb, volumeb, RT; buf=buf)
         return grad
     end
 

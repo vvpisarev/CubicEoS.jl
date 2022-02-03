@@ -3,6 +3,7 @@ include("nvt.jl")
 include("state_physical.jl")
 include("state_ratio.jl")
 include("state_idealidentity.jl")
+include("newton.jl")
 
 #=
 VT-flash algorithm

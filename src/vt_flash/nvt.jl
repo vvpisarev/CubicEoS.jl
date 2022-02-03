@@ -89,7 +89,7 @@ function nvthessian!(
     RT::Real;
     buf::BrusilovskyThermoBuffer=thermo_buffer(mix),
 )
-    # Filling B block. Part [C; D] is used as auxiliary
+    # Filling B block. Part C is used as auxiliary
     aux = @view hess[1:end-1, end]
     dNdN = @view hess[1:end-1, 1:end-1]
     aux, dNdN = log_c_activity_wj!(aux, dNdN, mix, nmol, volume, RT; buf=buf)

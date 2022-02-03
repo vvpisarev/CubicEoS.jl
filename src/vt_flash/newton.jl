@@ -78,7 +78,7 @@ function newton(
     maxiter::Integer=200,
     constrain_step::Function=(x, δ)->Inf,
 )
-    x = copy(x_)  # copy x for internal use
+    x = float.(x_)  # copy x for internal use
 
     ∇ = similar(x)
     δx = similar(x)

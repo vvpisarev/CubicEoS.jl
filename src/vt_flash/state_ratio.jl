@@ -17,17 +17,19 @@ function nmolvol(s::RatioState, nmolb::V, volumeb::T) where {V, T}
     return (nmol1, volume1)
 end
 
-function RatioState(
+function RatioState{V}(
     concentration::AbstractVector,
     saturation::Real,
     nmolb::AbstractVector,
     volumeb::Real
-)
+) where {V}
     x = similar(nmolb, Float64, length(nmolb) + 1)
     @. x[1:end-1] = volumeb * saturation * concentration / nmolb
     x[end] = saturation
-    return RatioState(x)
+    return RatioState{V}(x)
 end
+
+@inline RatioState(c, s, n, v) = RatioState{Vector{Float64}}(c, s, n, v)
 
 function gradient!(
     grad::AbstractVector,

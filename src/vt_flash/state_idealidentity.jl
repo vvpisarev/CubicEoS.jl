@@ -23,12 +23,12 @@ function nmolvol(s::IdealIdentityState, nmolb::V, volumeb::T) where {V, T}
     return (nmol, volume)
 end
 
-function IdealIdentityState(
+function IdealIdentityState{V}(
     concentration::AbstractVector,
     saturation::Real,
     nmolb::AbstractVector,
     volumeb::Real,
-)
+) where {V}
     vol = saturation * volumeb
     nmol = concentration * vol
 
@@ -37,8 +37,10 @@ function IdealIdentityState(
     @. x[1:end-1] = 2 * sqrt(nmolb) * asin(sqrt(nmol/nmolb))
     x[end] = sqrt(sum(nmolb)) * saturation
 
-    return IdealIdentityState(x)
+    return IdealIdentityState{V}(x)
 end
+
+@inline IdealIdentityState(c, s, n, v) = IdealIdentityState{Vector{Float64}}(c, s, n, v)
 
 function gradient!(
     grad::AbstractVector,

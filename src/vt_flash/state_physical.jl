@@ -10,18 +10,20 @@ end
 
 nmolvol(s::PhysicalState, nmolb::AbstractVector, volumeb::Real) = (s.x[1:end-1], s.x[end])
 
-function PhysicalState(
+function PhysicalState{V}(
     concentration::AbstractVector,
     saturation::Real,
     nmolb::AbstractVector,
     volumeb::Real
-)
+) where {V}
     x = similar(nmolb, Float64, length(nmolb) + 1)
     volume1 = saturation * volumeb
     @. x[1:end-1] = concentration * volume1
     x[end] = volume1
-    return PhysicalState(x)
+    return PhysicalState{V}(x)
 end
+
+@inline PhysicalState(c, s, n, v) = PhysicalState{Vector{Float64}}(c, s, n, v)
 
 function gradient!(
     grad::AbstractVector,

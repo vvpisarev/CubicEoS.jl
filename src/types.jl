@@ -73,23 +73,24 @@ end
 Mixture
 =#
 
-struct BrusilovskyEoSMixture{T} <: AbstractEoSMixture
-    components::StructVector{BrusilovskyEoSComponent{T}}
+struct BrusilovskyEoSMixture{T,VC} <: AbstractEoSMixture
+    components::VC
 
     eij::Matrix{T} # constant  thermal binary interaction coefficient
     gij::Matrix{T} # linear    thermal binary interaction coefficient
     hij::Matrix{T} # quadratic thermal binary interaction coefficient
+end
 
-    function BrusilovskyEoSMixture(
-        ;
-        components::AbstractVector{BrusilovskyEoSComponent{T}},
-        constant::AbstractMatrix,
-        linear::AbstractMatrix,
-        quadratic::AbstractMatrix,
-        kw...
-    ) where {T}
-        new{T}(StructVector(components), constant, linear, quadratic)
-    end
+const BrusilovskyEoSMixture{T} = BrusilovskyEoSMixture{T,VC} where {VC}
+
+function BrusilovskyEoSMixture(;
+    components::AbstractVector{<:BrusilovskyEoSComponent},
+    constant::AbstractMatrix,
+    linear::AbstractMatrix,
+    quadratic::AbstractMatrix,
+    kw...
+)
+    return BrusilovskyEoSMixture(StructArray(components), constant, linear, quadratic)
 end
 
 @inline Base.@propagate_inbounds function Base.getindex(

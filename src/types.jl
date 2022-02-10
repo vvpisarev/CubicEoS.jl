@@ -81,8 +81,6 @@ struct BrusilovskyEoSMixture{T,VC} <: AbstractEoSMixture
     hij::Matrix{T} # quadratic thermal binary interaction coefficient
 end
 
-const BrusilovskyEoSMixture{T} = BrusilovskyEoSMixture{T,VC} where {VC}
-
 function BrusilovskyEoSMixture(;
     components::AbstractVector{<:BrusilovskyEoSComponent},
     constant::AbstractMatrix,

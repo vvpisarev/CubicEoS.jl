@@ -1,11 +1,47 @@
-@testset "VT-flash" begin
-    mixture = CubicEoS.load(BrusilovskyEoSMixture; names=("methane", "n-pentane"))
-    volume = 1e-6
+@testset "vt_flash" begin
+    mix = CubicEoS.load(BrusilovskyEoSMixture;
+        names=("nitrogen", "methane", "propane", "n-decane"),
+    )
 
     # Two-phase state point
-    nmol = 5000 .* [0.547413, 0.452587] .* volume  # concentration * fraction * volume
-    RT = CubicEoS.GAS_CONSTANT_SI * 371
+    volume = 1e-6
+    nmol = 2000 .* volume .* [0.2463, 0.2208, 0.2208, 0.3121]
+    RT = CubicEoS.GAS_CONSTANT_SI * 500
 
-    # Just works test
-    @test converged(vt_flash(mixture, nmol, volume, RT))
+    StateTypes = (
+        CubicEoS.PhysicalState,
+        CubicEoS.RatioState,
+        CubicEoS.IdealIdentityState,
+    )
+
+    # Just works tests
+    @testset "Converged" begin
+        @test converged(vt_flash(mix, nmol, volume, RT))
+        for ST in StateTypes
+            @test converged(vt_flash(mix, nmol, volume, RT, ST))
+        end
+    end
+
+    @testset "Equality of approaches" begin
+        resultbfgs = map(StateTypes) do ST
+            vt_flash(mix, nmol, volume, RT, ST; gtol=1e-5/RT)
+        end
+        resultnewton = map(StateTypes) do ST
+            vt_flash_newton(mix, nmol, volume, RT, ST; gtol=1e-5/RT)
+        end
+        results = tuple(resultbfgs..., resultnewton...)
+
+        function compare(x, y)
+            @test x.nmolgas ≈ y.nmolgas rtol=1e-5
+            @test x.volumegas ≈ y.volumegas rtol=1e-5
+            @test x.nmolliq ≈ y.nmolliq rtol=1e-5
+            @test x.volumeliq ≈ y.volumeliq rtol=1e-5
+        end
+        for (r1, r2) in zip(results[1:end-1], results[2:end])
+            compare(r1, r2)
+        end
+        for (rbfgs, rnewt) in zip(resultbfgs, resultnewton)
+            @test CubicEoS.value(rbfgs.state) ≈ CubicEoS.value(rnewt.state) rtol=1e-5
+        end
+    end
 end

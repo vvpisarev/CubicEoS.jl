@@ -1,6 +1,9 @@
 include("types.jl")
 include("nvt.jl")
 include("state_physical.jl")
+include("state_ratio.jl")
+include("state_idealidentity.jl")
+include("newton.jl")
 
 #=
 VT-flash algorithm
@@ -12,18 +15,25 @@ function vt_flash(
     nmol::AbstractVector,
     volume::Real,
     RT::Real,
-    StateVariables::Type{<:AbstractVTFlashState},
+    StateVariables::Type{<:AbstractVTFlashState};
+    gtol::Real=1e-3/RT,
+    maxiter::Int=100,
 )
     singlephase, stability_tries = vt_stability(mix, nmol, volume, RT)
 
-    singlephase && return __vt_flash_single_phase_result(nmol, volume, RT)
+    if singlephase
+        concentration = nmol ./ volume
+        saturation = 1
+        state = StateVariables(concentration, saturation, nmol, volume)
+        return __vt_flash_single_phase_result(state, mix, nmol, volume, RT)
+    end
 
     concentration = __vt_flash_init_conc_choose(stability_tries)
     saturation = __find_saturation_negative_helmdiff(mix, nmol, volume, RT, concentration;
         maxsaturation=0.25,
         maxiter=50,
         scale=0.5,
-        helmdifftol=-1e-10,  # -1e-7/RT, where -1e-7 is old tolerance
+        helmdifftol=-1e-7/RT,
     )
 
     if isnan(saturation)
@@ -33,7 +43,7 @@ function vt_flash(
 
     state = StateVariables(concentration, saturation, nmol, volume)
 
-    return vt_flash!(state, mix, nmol, volume, RT; gtol=1e-6, maxiter=100)
+    return vt_flash!(state, mix, nmol, volume, RT; gtol=gtol, maxiter=maxiter)
 end
 
 function vt_flash!(
@@ -42,8 +52,8 @@ function vt_flash!(
     nmol::AbstractVector,
     volume::Real,
     RT::Real;
-    gtol::Real=1e-3,
-    maxiter::Int=100,
+    gtol::Real,
+    maxiter::Int,
 )
     state = unstable_state
     statex = value(state)
@@ -70,15 +80,24 @@ function vt_flash!(
     return __vt_flash_two_phase_result(state, mix, nmol, volume, RT, optimresult)
 end
 
-function __vt_flash_single_phase_result(nmol::AbstractVector, volume::Real, RT::Real)
-    return VTFlashResult(;
-            converged=true,
-            singlephase=true,
-            RT=RT,
-            nmolgas=nmol,
-            volumegas=volume,
-            nmolliq=similar(nmol),
-            volumeliq=0,
+function __vt_flash_single_phase_result(
+    state::S,
+    mix::BrusilovskyEoSMixture,
+    nmol::AbstractVector{T},
+    volume::Real,
+    RT::Real
+) where {S, T}
+    return VTFlashResult{T, S}(;
+        converged=true,
+        singlephase=true,
+        RT=RT,
+        nmolgas=nmol,
+        volumegas=volume,
+        nmolliq=similar(nmol),
+        volumeliq=0,
+        state=state,
+        iters=-1,
+        calls=-1,
     )
 end
 
@@ -298,7 +317,7 @@ function __vt_flash_hessian!(
     𝔻 += ∇P[end]  # 𝔻 = (∂P/∂V)' + (∂P/∂V)''
     𝔻 *= -volume^2  # final 𝔻
     hess[end, end] = 𝔻
-    return nothing
+    return hess
 end
 
 function vt_flash_closures(
@@ -543,7 +562,7 @@ function vt_flash(
 
     # initial hessian
     hessian = Matrix{T}(undef, (size(state, 1), size(state, 1)))
-    __vt_flash_hessian!(hessian, state, mix, nmol, volume, RT)
+    hessian = __vt_flash_hessian!(hessian, state, mix, nmol, volume, RT)
 
     # create closures for helmoltz energy, its gradient and constrain step
     constrain_step, _, helmholtz_diff! = vt_flash_closures(mix, nmol, volume, RT)

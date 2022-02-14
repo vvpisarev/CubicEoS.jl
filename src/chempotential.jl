@@ -150,8 +150,8 @@ function log_c_activity_wj(
     buf::BrusilovskyThermoBuffer = thermo_buffer(mix),
 ) where {T}
     nc = ncomponents(mix)
-    log_ca = Vector{T}(undef, nc)
-    jacobian = similar(log_ca, (nc, nc))
+    log_ca = similar(nmol, T)
+    jacobian = Matrix{T}(undef, nc, nc)
     return log_c_activity_wj!(log_ca, jacobian, mix, nmol, volume, RT; buf = buf)
 end
 

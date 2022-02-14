@@ -73,15 +73,16 @@ function newton(
     f::Function,
     ∇f!::Function,
     H!::Function,
-    x::AbstractVector;
+    x_::AbstractVector;
     gtol::Real=1e-6,
     maxiter::Integer=200,
     constrain_step::Function=(x, δ)->Inf,
 )
-    x = convert(Vector{Float64}, x)
+    x = float.(x_)  # copy x for internal use
+
     ∇ = similar(x)
     δx = similar(x)
-    hess_full = Matrix{Float64}(undef, size(∇, 1), size(∇, 1))
+    hess_full = Matrix{eltype(x)}(undef, size(∇, 1), size(∇, 1))
     vec = similar(x)
 
     fval = f(x)
@@ -107,9 +108,7 @@ function newton(
 
     # check gradient norm before iterations
     ∇ = ∇f!(∇, x)
-    if norm(∇, 2) ≤ gtol
-        return NewtonResult(true, x, 0, totfcalls)
-    end
+    norm(∇, 2) ≤ gtol && return NewtonResult(true, x, 0, totfcalls)
 
     for i in 1:maxiter
         # descent direction `δx`
@@ -149,9 +148,7 @@ function newton(
         @debug "newton" i repr(δx) norm_step=norm(δx, 2) α αmax repr(x) fval fcalls norm_gprev=norm(∇f!(similar(x), x - α*δx)) norm_gnew=norm(∇) prod(diag(hess.U))
 
         # check for convergence
-        if norm(∇, 2) ≤ gtol
-            return NewtonResult(true, x, i, totfcalls)
-        end
+        norm(∇, 2) ≤ gtol && return NewtonResult(true, x, i, totfcalls)
     end
     return NewtonResult(false, x, maxiter, totfcalls)
 end
@@ -164,75 +161,75 @@ same as for BFGS-version of vtflash.
 (!) BFGS' closures must be constructed from the same thermodynamical properties.
 """
 function __vt_flash_newton_closures(
-    helmholtz_diff!::Function,
-    helmholtz_diff_grad!::Function,
-    mix::BrusilovskyEoSMixture{T},
-    nmol::AbstractVector{T},
-    volume::T,
-    RT::T,
-) where {T<:Real}
-    vecnc₊ = Vector{T}(undef, size(nmol, 1) + 1)
-    thermo_buf = thermo_buffer(mix)
-    hessian_buf = HessianBuffer(mix)
+    state1::AbstractVTFlashState,
+    helmdiff_qnewton!::Function,
+    helmgrad_qnewton!::Function,
+    mix::BrusilovskyEoSMixture,
+    nmolb::AbstractVector,
+    volumeb::Real,
+    RT::Real,
+)
+    auxv = Vector{Float64}(undef, length(nmolb) + 1)
+    state1x = value(state1)
+    buf = thermo_buffer(mix)
 
-    # below `x` is mixtures' state
-    # helmholtz
-    function func(x::AbstractVector{T})
-        ΔA, _ = helmholtz_diff!(x, vecnc₊)
-        return ΔA
+    function clsr_func(x::AbstractVector)
+        state1x .= x
+        Δa, _ = helmdiff_qnewton!(x, auxv)
+        return Δa
     end
 
-    # helmholtz gradient
-    function gradient!(gradient_::AbstractVector{T}, x::AbstractVector{T})
-        helmholtz_diff_grad!(x, gradient_)  # yes, base func uses this signature
-        return gradient_
+    function clsr_hessian!(hess::AbstractMatrix, x::AbstractVector)
+        state1x .= x
+        hess = hessian!(hess, state1, mix, nmolb, volumeb, RT; buf=buf)
+        return hess
     end
 
-    # helmholtz hessian
-    function hessian!(hessian::AbstractMatrix{T}, x::AbstractVector{T})
-        __vt_flash_hessian!(hessian, x, mix, nmol, volume, RT; buf=hessian_buf)
-        return hessian
-    end
-
-    return func, gradient!, hessian!
+    return clsr_func, helmgrad_qnewton!, clsr_hessian!
 end
 
-function vt_flash_newton(
-    mix::BrusilovskyEoSMixture{T},
+function vt_flash_newton!(
+    unstable_state::AbstractVTFlashState,
+    mix::BrusilovskyEoSMixture,
     nmol::AbstractVector,
     volume::Real,
-    RT::Real,
-    unstable_state::AbstractVector,
-) where {T}
-    state = copy(unstable_state)
+    RT::Real;
+    gtol::Real,
+    maxiter::Int,
+)
+    state = unstable_state
 
     # bfgs closures, just to reuse later
-    constrain_step, helmholtz_diff_grad!, helmholtz_diff! = vt_flash_closures(
-        mix, nmol, volume, RT
+    constrain_step, helmgrad!, helmdiff! = __vt_flash_optim_closures(
+        state, mix, nmol, volume, RT
     )
+
     # closures for newton algorithm
-    newton_helmholtz_diff, newton_helmholtz_diff_grad!, newton_helmholtz_diff_hessian! =
+    newton_helmdiff, newton_helmgrad!, newton_helmhess! =
         __vt_flash_newton_closures(
-            helmholtz_diff!,
-            helmholtz_diff_grad!,
+            state,
+            helmdiff!,
+            helmgrad!,
             mix,
             nmol,
             volume,
             RT,
         )
 
-    # run optimizer
-    result = newton(
-        newton_helmholtz_diff,
-        newton_helmholtz_diff_grad!,
-        newton_helmholtz_diff_hessian!,
-        state;
-        constrain_step=constrain_step,
-        gtol=1e-3,
-        maxiter=200,
-    )
+    statex = value(state)
 
-    return __vt_flash_two_phase_result(mix, nmol, volume, RT, result)
+    optimresult = newton(
+        newton_helmdiff,
+        newton_helmgrad!,
+        newton_helmhess!,
+        statex;
+        constrain_step=constrain_step,
+        gtol=gtol,
+        maxiter=maxiter,
+    )
+    statex .= optimresult.argument
+
+    return __vt_flash_two_phase_result(state, mix, nmol, volume, RT, optimresult)
 end
 
 """
@@ -242,38 +239,37 @@ Find VT-equilibrium of `mix`, at given `nmol`, `volume` and thermal energy `RT`
 using Newton's minimization. Return [`VTFlashResult`](@ref).
 """
 function vt_flash_newton(
-    mix::BrusilovskyEoSMixture{T},
+    mix::BrusilovskyEoSMixture,
     nmol::AbstractVector,
     volume::Real,
     RT::Real,
-) where {T}
-    # run vt-stability to find out whether a state single phase or not
-    singlephase, vt_stab_tries = vt_stability(mix, nmol, volume, RT)
-    @debug "VTFlash: VTStability result" singlephase
+    StateVariables::Type{<:AbstractVTFlashState};
+    gtol::Real=1e-3/RT,
+    maxiter::Int=100,
+)
+    singlephase, stability_tries = vt_stability(mix, nmol, volume, RT)
 
     if singlephase
-        return VTFlashResult{T}(
-            converged=true,
-            singlephase=true,
-            RT=RT,
-            nmol_1=nmol,
-            V_1=volume,
-            nmol_2=similar(nmol),
-            V_2=0
-        )
+        concentration = nmol ./ volume
+        saturation = 1
+        state = StateVariables(concentration, saturation, nmol, volume)
+        return __vt_flash_single_phase_result(state, mix, nmol, volume, RT)
     end
 
-    # two-phase state case
-    init_found, state = __vt_flash_initial_state(
-        mix, nmol, volume, RT, vt_stab_tries
+    concentration = __vt_flash_init_conc_choose(stability_tries)
+    saturation = __find_saturation_negative_helmdiff(mix, nmol, volume, RT, concentration;
+        maxsaturation=0.25,
+        maxiter=50,
+        scale=0.5,
+        helmdifftol=-1e-7/RT,
     )
 
-    @debug "VTFlash: initial state search result" found=init_found state=repr(state) ΔA=helmholtz_diff!(state, similar(state))
-
-    if !init_found
+    if isnan(saturation)
         @error "VTFlash: Initial state was not found!" mixture=mix nmol=repr(nmol) volume=volume RT=RT
         error("VTFlash: Initial state was not found!")
     end
 
-    return vt_flash_newton(mix, nmol, volume, RT, state)
+    state = StateVariables(concentration, saturation, nmol, volume)
+
+    return vt_flash_newton!(state, mix, nmol, volume, RT; gtol=gtol, maxiter=maxiter)
 end

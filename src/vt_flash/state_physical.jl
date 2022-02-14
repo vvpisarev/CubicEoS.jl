@@ -1,5 +1,7 @@
 #=
 Flash based on physical variables: moles [mol] and volume [m³] of a phase.
+
+state = [N'₁, ..., N'ₙ, V']
 =#
 
 struct PhysicalState{V<:AbstractVector} <: AbstractVTFlashState
@@ -8,24 +10,20 @@ end
 
 nmolvol(s::PhysicalState, nmolb::AbstractVector, volumeb::Real) = (s.x[1:end-1], s.x[end])
 
-"""
-    PhysicalState(concentration, saturation, nmolb, volumeb)
-
-Construct `PhysicalState` from phase's `concentration`, `saturation` and
-base phase `nmolb` moles and `volumeb`.
-"""
-function PhysicalState(
+function PhysicalState{V}(
     concentration::AbstractVector,
     saturation::Real,
     nmolb::AbstractVector,
     volumeb::Real
-)
+) where {V}
     x = similar(nmolb, Float64, length(nmolb) + 1)
     volume1 = saturation * volumeb
     @. x[1:end-1] = concentration * volume1
     x[end] = volume1
-    return PhysicalState(x)
+    return PhysicalState{V}(x)
 end
+
+@inline PhysicalState(c, s, n, v) = PhysicalState{Vector{Float64}}(c, s, n, v)
 
 function gradient!(
     grad::AbstractVector,
@@ -102,12 +100,13 @@ function __vt_flash_optim_closures(
     statebxdotcov = dot(statebx, covolumes)
 
     function clsr_constrain_step(x::AbstractVector, dir::AbstractVector)
+        state1x .= x
         α = Inf
         # Finding upper limit
         ## Non-negativness: 0 < x[i] + α dir[i] < statexb[i]
         @inbounds for i in eachindex(x)
             if iszero(dir[i]) && !(0 < x[i] < statebx[i])
-                error("VTFlash: constrain_step. Zero direction $i, but state[$i] = $(x[i])")
+                throw(ConstrainStepZeroDirectionError(i, x[i]))
             end
             if dir[i] < 0
                 α = min(α, -x[i]/dir[i])
@@ -144,7 +143,7 @@ function __vt_flash_optim_closures(
         end
 
         # Is max α upper than lower limit?
-        α ≤ αlo && error("VTFlash: constrain_step. Lower bound not meet.")
+        α ≤ αlo && throw(ConstrainStepLowerBoundError(x, dir))
 
         return α
     end

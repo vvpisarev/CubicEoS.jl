@@ -176,6 +176,50 @@ function newton(
     return NewtonResult(false, x, maxiter, totfcalls)
 end
 
+function __convergence_closure(
+    state1::AbstractVTFlashState,
+    mix::BrusilovskyEoSMixture,
+    nmolb::AbstractVector,
+    volumeb::Real,
+    RT::Real;
+    chemrtol::Real,
+    pressrtol::Real,
+    buf::BrusilovskyThermoBuffer=thermo_buffer(mix),
+)
+    state1x = value(state1)
+
+    g1 = Vector{Float64}(undef, ncomponents(mix) + 1)
+    g2 = similar(g1)
+    diff = similar(g1)
+    nmol2 = similar(g1, Float64, ncomponents(mix))
+
+    function convcond(x::AbstractVector, g::AbstractVector)
+        state1x .= x
+        nmol1, vol1 = nmolvol(state1, nmolb, volumeb)
+        g1 = CubicEoS.nvtgradient!(g1, mix, nmol1, vol1, RT; buf=buf)
+
+        @. nmol2 = nmolb - nmol1
+        vol2 = volumeb - vol1
+        g2 = CubicEoS.nvtgradient!(g2, mix, nmol2, vol2, RT; buf=buf)
+
+        #=
+                   [μ₁' - μ₁'', ..., μₙ' - μₙ''; -P' + P'']ᵀ
+            diff = ----------------------------------------
+                                    RT
+        =#
+        @. diff = g1 - g2
+
+        nrmchem = let chem1 = (@view g1[1:end-1]), diffchem = (@view diff[1:end-1])
+            abs.(diffchem) ./ abs.(chem1) |> maximum
+        end
+        nrmpress = abs(diff[end] / g1[end])
+
+        return nrmchem ≤ chemrtol && nrmpress ≤ pressrtol
+    end
+
+    return convcond
+end
+
 """
 Construct functions of proper signature for [`newton`](@ref) algorithm.
 The function reuses `helmholtz_diff!` and `helmholtz_diff_grad!` which are
@@ -217,7 +261,8 @@ function vt_flash_newton!(
     nmol::AbstractVector,
     volume::Real,
     RT::Real;
-    gtol::Real,
+    chemrtol::Real,
+    pressrtol::Real,
     maxiter::Int,
 )
     state = unstable_state
@@ -239,6 +284,11 @@ function vt_flash_newton!(
             RT,
         )
 
+    convcond = __convergence_closure(state, mix, nmol, volume, RT;
+        chemrtol=chemrtol,
+        pressrtol=pressrtol,
+    )
+
     statex = value(state)
 
     optimresult = newton(
@@ -247,8 +297,9 @@ function vt_flash_newton!(
         newton_helmhess!,
         statex;
         constrain_step=constrain_step,
-        gtol=gtol,
+        gtol=NaN,
         maxiter=maxiter,
+        convcond=convcond,
     )
     statex .= optimresult.argument
 
@@ -256,10 +307,12 @@ function vt_flash_newton!(
 end
 
 """
-    vt_flash_newton(mix, nmol, volume, RT)
+    vt_flash_newton(mix, nmol, volume, RT, StateVariables[; chemrtol, pressrtol, maxiter])
 
 Find VT-equilibrium of `mix`, at given `nmol`, `volume` and thermal energy `RT`
-using Newton's minimization. Return [`VTFlashResult`](@ref).
+using Newton's minimization.
+
+Return [`VTFlashResult`](@ref).
 """
 function vt_flash_newton(
     mix::BrusilovskyEoSMixture,
@@ -267,7 +320,8 @@ function vt_flash_newton(
     volume::Real,
     RT::Real,
     StateVariables::Type{<:AbstractVTFlashState};
-    gtol::Real=1e-3/RT,
+    chemrtol::Real=1e3*eps(),
+    pressrtol::Real=1e3*eps(),
     maxiter::Int=100,
 )
     singlephase, stability_tries = vt_stability(mix, nmol, volume, RT)
@@ -294,5 +348,9 @@ function vt_flash_newton(
 
     state = StateVariables(concentration, saturation, nmol, volume)
 
-    return vt_flash_newton!(state, mix, nmol, volume, RT; gtol=gtol, maxiter=maxiter)
+    return vt_flash_newton!(state, mix, nmol, volume, RT;
+        chemrtol=chemrtol,
+        pressrtol=pressrtol,
+        maxiter=maxiter
+    )
 end

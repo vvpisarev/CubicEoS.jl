@@ -156,6 +156,56 @@ function __find_saturation_negative_helmdiff(
     return NaN
 end
 
+function __convergence_closure(
+    state1::AbstractVTFlashState,
+    mix::BrusilovskyEoSMixture,
+    nmolb::AbstractVector,
+    volumeb::Real,
+    RT::Real;
+    chemtol::Real,
+    presstol::Real,
+    buf::BrusilovskyThermoBuffer=thermo_buffer(mix),
+)
+    state1x = value(state1)
+
+    g1 = Vector{Float64}(undef, ncomponents(mix) + 1)
+    g2 = similar(g1)
+    diff = similar(g1)
+    nmol2 = similar(g1, Float64, ncomponents(mix))
+
+    function convcond(x::V, xpre::V, y::T, ypre::T, g::V) where {T<:Real,V<:AbstractVector}
+        state1x .= x
+        nmol1, vol1 = nmolvol(state1, nmolb, volumeb)
+        g1 = CubicEoS.nvtgradient!(g1, mix, nmol1, vol1, RT; buf=buf)
+
+        @. nmol2 = nmolb - nmol1
+        vol2 = volumeb - vol1
+        g2 = CubicEoS.nvtgradient!(g2, mix, nmol2, vol2, RT; buf=buf)
+
+        #=
+                   [μ₁' - μ₁'', ..., μₙ' - μₙ''; -P' + P'']ᵀ
+            diff = ----------------------------------------
+                                    RT
+        =#
+        @. diff = g1 - g2
+
+        condchem = let diffchem = (@view diff[1:end-1])
+            # max_i |chem'_i - chem''_i| / RT < tolerance
+            maximum(abs, diffchem) < chemtol
+        end
+        condpress = let diffpress = diff[end]
+            # |P' - P''| V
+            # ------------ < tolerance
+            #    RT ΣNᵢ
+            abs(diffpress) * volumeb / sum(nmolb) < presstol
+        end
+
+        return condchem && condpress
+    end
+
+    return convcond
+end
+
 function __sort_phases!(mix, nmol₁, V₁, nmol₂, V₂, RT)
     P₁ = pressure(mix, nmol₁, V₁, RT)  # they should be equal
     P₂ = pressure(mix, nmol₂, V₂, RT)

@@ -1,5 +1,3 @@
-using LinearAlgebra
-
 @testset "newton.jl" begin
     booth(x) = (x[1] + 2*x[2] - 7)^2 + (2*x[1] + x[2] - 5)^2
     gradbooth!(g, x) = begin g .= Float64[10*x[1] + 8*x[2] - 34, 8*x[1] + 10*x[2] - 38]; g end
@@ -33,7 +31,7 @@ using LinearAlgebra
         result = CubicEoS.newton(booth, gradbooth!, hessbooth!, x;
                     gtol=NaN,
                     maxiter=2,
-                    convcond=(x, g) -> norm(g, 2) ≤ 1e-6,
+                    convcond=(x, xpre, y, ypre, g) -> abs(y - ypre) ≤ 1e-6,
         )
         @test result.converged
         @test result.argument ≈ xoptim

@@ -55,39 +55,51 @@ function backtracking_line_search(
 end
 
 """
-    newton(f, grad!, hess!, x₀[; gtol=1e-6, maxiter=200, constrain_step, convcond])
+    newton(f, grad!, hess!, x₀[; gtol=1e-6, convcond, maxiter=200, constrain_step])
 
 Find (un)constrained minimum of `f(x)::Real` using Newton's solver with line search
 and hessian modified by Cholesky factorization.
-
 The optimization starts at `x₀` performing no more than `maxiter` Newton's steps.
 
-New point `xnew ← x + αmax * d` is constrained in Newton's `d`irection by
+New point `x ← xpre + αmax * d` is constrained in Newton's `d`irection by
 `constrain_step(x, d) -> α::Real`.
 By default, the constrains are disabled.
-
-The *end of optimization* is controlled by `gtol` and `convcond`.
-When `convcond` is omitted, the optimization ends when 2-norm of gradient is ≤ `gtol`.
-When `convcond(x, g) -> Bool` is provided, it's called before checking of gradient's norm.
 
 Return [`NewtonResult`](@ref) object.
 
 # Arguments
 
+The target function and initialization of optimization is defined by following arguments
+
+- `f(x) -> Real`: function to optimize;
 - `grad!(g, x) -> g`: must update and return `g`radient of `f` at `x`;
-- `hess!(H, x) -> H`: must update and return `H`essian matrix of `f` at `x`;
+- `hess!(H, x) -> H`: must update and return `H`essian matrix of `f` at `x`.
+- `x₀::AbstractVector`: initial argument for optimization.
 
 # Optional arguments
 
-- `gtol::Real=1e-6`: 2-norm of gradient when iterations are considered converged,
-                     if `NaN`, the norm isn't checked;
-- `maxiter::Integer=200`: maximum allowed Newton's steps;
+## Convergence criteria
+
+By default, the optimization considered converged when `norm(∇(x), 2) ≤ gtol`.
+Generally, the convergence criterion is defined by `convcond`.
+
+- `gtol::Real=1e-6`: (default criterion) 2-norm of gradient when iterations
+    are considered converged;
+- `convcond::Function` with signature `(x, xpre, y, ypre, g)->Bool`:
+    if returns `true` for given arguments `x` and `xpre`, function values `y=f(x)`,
+    `ypre=f(xpre)` and gradient `g=∇(x)`, the optimization is stopped.
+
+Example (default criterion): `stopcond=(x, xpre, y, ypre, g)->norm(g, 2) ≤ gtol`.
+
+## Defining constrains
+
 - `constrain_step::Function=(x, d)->Inf`:
-        given an argument `x` and `d`irection, returns maximum allowed scalar `α` in form of
-        `xnew = x + α*d`. Default is unconstrained optimization.
-- `convcond::Function=(xnew, gnew)->false`:
-        if returns `true` for given new point and gradient, the optimization is stopped.
-        Disabled by default.
+    given an argument `x` and `d`irection, returns maximum allowed scalar `α` in form of
+    `xnew = x + α*d`. Default is unconstrained optimization (`α = Inf`).
+
+## Forcing stop of optimization
+
+- `maxiter::Integer=200`: maximum allowed Newton's steps.
 """
 function newton(
     f::Function,
@@ -97,7 +109,7 @@ function newton(
     gtol::Real=1e-6,
     maxiter::Integer=200,
     constrain_step::Function=(x, d)->Inf,
-    convcond::Function=(xnew, gnew)->false,
+    convcond::Function=(x, xpre, y, ypre, g)->norm(g, 2) ≤ gtol,
 )
     x = float.(x_)  # copy x for internal use
 
@@ -105,9 +117,9 @@ function newton(
     δx = similar(x)
     hess_full = Matrix{eltype(x)}(undef, size(∇, 1), size(∇, 1))
     vec = similar(x)
+    xpre = similar(x)
+    totfcalls = 0
 
-    fval = f(x)
-    totfcalls = 1
 
     """
     Returns closure for Downhill.strong_backtracking!
@@ -127,10 +139,10 @@ function newton(
 
     fdf = fdfclosure(x)
 
-    # check for convergence in initial point
+    # Initializing, main cycle is postconditioned
+    y = f(x)
+    totfcalls += 1
     ∇ = ∇f!(∇, x)
-    convcond(x, ∇) && return NewtonResult(true, x, 0, totfcalls)
-    !isnan(gtol) && norm(∇, 2) ≤ gtol && return NewtonResult(true, x, 0, totfcalls)
 
     for i in 1:maxiter
         # descent direction `δx`
@@ -150,11 +162,6 @@ function newton(
             σ=0.9,
         )
         fcalls = 0  # by current implementation they are unknown :c
-
-        # previous code, which uses "simple" backtracking
-        # αmax = min(1.0, constrain_step(x, δx))
-        # α, fval, fcalls = backtracking_line_search(f, x, δx, fval; α=αmax, p=0.5, buf=vec)
-
         totfcalls += fcalls
 
         if α ≤ 0
@@ -163,15 +170,17 @@ function newton(
         end
 
         # update argument `x`, function value and gradient in `x`
+        xpre .= x
+        ypre = y
+
         @. x += α * δx
-        fval = f(x)
+        y = f(x)
         ∇ = ∇f!(∇, x)
 
-        @debug "newton" i repr(δx) norm_step=norm(δx, 2) α αmax repr(x) fval fcalls norm_gprev=norm(∇f!(similar(x), x - α*δx)) norm_gnew=norm(∇) prod(diag(hess.U))
+        @debug "newton" i repr(δx) norm_step=norm(δx, 2) α αmax repr(x) y fcalls norm_gprev=norm(∇f!(similar(x), x - α*δx)) norm_gnew=norm(∇) prod(diag(hess.U))
 
         # check for convergence
-        convcond(x, ∇) && return NewtonResult(true, x, i, totfcalls)
-        !isnan(gtol) && norm(∇, 2) ≤ gtol && return NewtonResult(true, x, i, totfcalls)
+        convcond(x, xpre, y, ypre, ∇) && return NewtonResult(true, x, i, totfcalls)
     end
     return NewtonResult(false, x, maxiter, totfcalls)
 end
@@ -193,7 +202,7 @@ function __convergence_closure(
     diff = similar(g1)
     nmol2 = similar(g1, Float64, ncomponents(mix))
 
-    function convcond(x::AbstractVector, g::AbstractVector)
+    function convcond(x::V, xpre::V, y::T, ypre::T, g::V) where {T<:Real,V<:AbstractVector}
         state1x .= x
         nmol1, vol1 = nmolvol(state1, nmolb, volumeb)
         g1 = CubicEoS.nvtgradient!(g1, mix, nmol1, vol1, RT; buf=buf)

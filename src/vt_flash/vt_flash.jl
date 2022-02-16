@@ -11,14 +11,16 @@ VT-flash algorithm
 
 "VT-flash."
 function vt_flash(
-    mix::BrusilovskyEoSMixture,
+    mix::BrusilovskyEoSMixture{T},
     nmol::AbstractVector,
     volume::Real,
     RT::Real,
     StateVariables::Type{<:AbstractVTFlashState};
-    gtol::Real=1e-3/RT,
+    tol::Real=1024*eps(T),
+    chemtol::Real=tol,
+    presstol::Real=tol,
     maxiter::Int=100,
-)
+) where {T}
     singlephase, stability_tries = vt_stability(mix, nmol, volume, RT)
 
     if singlephase
@@ -43,7 +45,11 @@ function vt_flash(
 
     state = StateVariables(concentration, saturation, nmol, volume)
 
-    return vt_flash!(state, mix, nmol, volume, RT; gtol=gtol, maxiter=maxiter)
+    return vt_flash!(state, mix, nmol, volume, RT;
+        chemtol=chemtol,
+        presstol=presstol,
+        maxiter=maxiter
+    )
 end
 
 function vt_flash!(
@@ -52,7 +58,8 @@ function vt_flash!(
     nmol::AbstractVector,
     volume::Real,
     RT::Real;
-    gtol::Real,
+    chemtol::Real,
+    presstol::Real,
     maxiter::Int,
 )
     state = unstable_state
@@ -66,11 +73,17 @@ function vt_flash!(
         state, mix, nmol, volume, RT
     )
 
+    convcond = __convergence_closure(state, mix, nmol, volume, RT;
+        chemtol=chemtol,
+        presstol=presstol,
+    )
+
     # run optimize
     optmethod = Downhill.CholBFGS(statex)
     Downhill.reset!(optmethod, statex, hessian)
     optimresult = Downhill.optimize!(helmdiff!, optmethod, statex;
-        gtol=gtol,
+        gtol=NaN,
+        convcond=convcond,
         maxiter=maxiter,
         constrain_step=constrain_step,
         reset=false,

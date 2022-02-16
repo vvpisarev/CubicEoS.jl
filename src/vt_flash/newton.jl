@@ -234,8 +234,9 @@ end
 """
     vt_flash_newton(mix, nmol, volume, RT, StateVariables[; tol, chemtol, presstol, maxiter])
 
-Find VT-equilibrium of `mix`, at given `nmol`, `volume` and thermal energy `RT`
-using Newton's minimization.
+Similar to [`vt_flash`](@ref), find thermodynamical equilibrium of `mix`
+at given `nmol`, `volume` and thermal energy `RT`, but uses *Newton's optimization* in
+phase-split stage.
 
 For the arguments see [`vt_flash`](@ref).
 

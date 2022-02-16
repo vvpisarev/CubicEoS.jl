@@ -9,7 +9,55 @@ include("newton.jl")
 VT-flash algorithm
 =#
 
-"VT-flash."
+"""
+    vt_flash(mix, nmol, volume, RT, StateVariables[; tol, chemtol=tol, presstol=tol, maxiter=100])
+
+Two-phase thermodynamical equilibrium solver for `mix`ture at given moles `nmol`, `volume`
+and thermal energy `RT` (VT-flash).
+Includes two stages, the first is stability checking of single-phase state,
+if the state is unstable, then an initial two-phase state is constructed,
+and phase-split is performed with `StateVariables` using Cholesky-BFGS optimization.
+
+For two-phase state the equilibrium is considered, when
+
+1. Chemical potentials are equal in a sense
+
+```
+ 1
+--- maxᵢ |μᵢ' - μᵢ''| < chemtol
+ RT
+```
+
+2. Pressures are equals in a sense
+```
+|P' - P''| volume
+----------------- < presstol,
+   RT sum(nmol)
+```
+where `i` is component index, and `'`, `''` are indexes of phases.
+
+Return [`VTFlashResult`](@ref).
+
+See also [`CubicEoS.vt_flash!`](@ref), [`vt_flash_newton`](@ref).
+
+# Arguments
+
+- `mix::BrusilovskyEoSMixture{T}`: mixture;
+- `nmol::AbstractVector`: moles of mixtures' components [mole];
+- `volume::Real`: volume of mixture [meter³];
+- `RT::Real`: use to specify temperature of mixture,
+    `CubicEoS.GAS_CONSTANT_SI * temperature`, [Joule / mole];
+- `StateVariables::Type{<:AbstractVTFlashState}`: one of state variables to use internally
+    in phase-split stage.
+
+# Optional arguments
+
+- `chemtol::Real=tol`: tolerance for chemical potentials of components;
+- `presstol::Real=tol`: tolerance for pressures of phases;
+- `tol::Real=1024*eps(T)`: default tolerance for both `chemtol` and `presstol`,
+    `T` is AbstractFloat type defined by `mixture`'s type;
+- `maxiter::Integer`: maximum allowed steps in phase-split stage.
+"""
 function vt_flash(
     mix::BrusilovskyEoSMixture{T},
     nmol::AbstractVector,
@@ -19,7 +67,7 @@ function vt_flash(
     tol::Real=1024*eps(T),
     chemtol::Real=tol,
     presstol::Real=tol,
-    maxiter::Int=100,
+    maxiter::Integer=100,
 ) where {T}
     singlephase, stability_tries = vt_stability(mix, nmol, volume, RT)
 
@@ -52,6 +100,16 @@ function vt_flash(
     )
 end
 
+"""
+    vt_flash!(unstable_state, mix, nmol, volume, RT; chemtol, presstol, maxiter)
+
+Perform split phase of VT-flash from an `unstable_state::AbstractVTFlashState`,
+which will be destructed.
+
+For rest of arguments see [`vt_flash`](@ref).
+
+Return [`VTFlashResult`](@ref).
+"""
 function vt_flash!(
     unstable_state::AbstractVTFlashState,
     mix::BrusilovskyEoSMixture,

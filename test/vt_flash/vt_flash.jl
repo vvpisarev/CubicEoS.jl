@@ -27,7 +27,7 @@
             vt_flash(mix, nmol, volume, RT, ST; gtol=1e-5/RT)
         end
         resultnewton = map(StateTypes) do ST
-            vt_flash_newton(mix, nmol, volume, RT, ST; gtol=1e-5/RT)
+            vt_flash_newton(mix, nmol, volume, RT, ST; chematol=1e-8, presstol=1e-8)
         end
         results = tuple(resultbfgs..., resultnewton...)
 

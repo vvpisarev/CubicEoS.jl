@@ -15,46 +15,6 @@ struct NewtonResult{T}
 end
 
 """
-    backtracking_line_search(f, x₀, d, y₀[; α₀, p, buf])
-
-Find `x = x₀ + α*d` (`x₀::AbstractVector`, `d::AbstractVector`) that `f(x)::Real`
-is < `y₀ == f(x₀)` by exponentially decreasing `::Real` `α = α₀ * pⁱ` (`p::Real=0.5` must be < 1).
-Optional `buf` is similar to `x₀` for storing `x₀ + α*d` trial state.
-
-Return tuple of `α`, `f(x₀ + α*d)` and number of `f`'s calls.
-"""
-function backtracking_line_search(
-    f::Function,
-    x₀::AbstractVector{T},
-    d::AbstractVector{T},
-    y₀::T;
-    α::T=one(T),
-    p::Real=one(T)/2,
-    buf::AbstractVector{T}=similar(x₀),
-) where {T<:Real}
-    xtry = buf
-    calls = 0
-    ftry = T(NaN)
-
-    # (?) better `maxiter = 1 + ceil(Int, log(eps(α))/log(p))`
-    # If use above, then `p^maxiter ≈ eps(α₀)`
-    maxiter = 200
-    for i in 1:maxiter
-        @. xtry = x₀ + α*d
-        calls += 1
-        ftry = f(xtry)
-
-        @debug "backtracking_line_search" i α p ftry y₀ ftry-y₀
-
-        ftry < y₀ && break
-        α *= p
-
-        i == maxiter && error("Line search number of iterations ($(maxiter)) exceeded.")
-    end
-    return α, ftry, calls
-end
-
-"""
     newton(f, grad!, hess!, x₀[; gtol=1e-6, convcond, maxiter=200, constrain_step])
 
 Find (un)constrained minimum of `f(x)::Real` using Newton's solver with line search

@@ -182,7 +182,7 @@ function __convergence_closure(
     nmolb::AbstractVector,
     volumeb::Real,
     RT::Real;
-    chematol::Real,
+    chemtol::Real,
     presstol::Real,
     buf::BrusilovskyThermoBuffer=thermo_buffer(mix),
 )
@@ -210,12 +210,14 @@ function __convergence_closure(
         @. diff = g1 - g2
 
         condchem = let diffchem = (@view diff[1:end-1])
-            # max_i |chem'_i - chem''_i| / RT ≤ tolerance
-            maximum(abs, diffchem) ≤ chematol
+            # max_i |chem'_i - chem''_i| / RT < tolerance
+            maximum(abs, diffchem) < chemtol
         end
-        condpress = let diffpress = diff[end], press1 = g1[end], press2 = g2[end]
-            # |P' - P''| ≤ tol * (1 + max(|P'|, |P''|))
-            RT * abs(diffpress) ≤ presstol * (1 + RT * maximum(abs, (press1, press2)))
+        condpress = let diffpress = diff[end]
+            # |P' - P''| V
+            # ------------ < tolerance
+            #    RT ΣNᵢ
+            abs(diffpress) * volumeb / sum(nmolb) < presstol
         end
 
         return condchem && condpress
@@ -265,7 +267,7 @@ function vt_flash_newton!(
     nmol::AbstractVector,
     volume::Real,
     RT::Real;
-    chematol::Real,
+    chemtol::Real,
     presstol::Real,
     maxiter::Int,
 )
@@ -289,7 +291,7 @@ function vt_flash_newton!(
         )
 
     convcond = __convergence_closure(state, mix, nmol, volume, RT;
-        chematol=chematol,
+        chemtol=chemtol,
         presstol=presstol,
     )
 
@@ -311,7 +313,7 @@ function vt_flash_newton!(
 end
 
 """
-    vt_flash_newton(mix, nmol, volume, RT, StateVariables[; chematol, presstol, maxiter])
+    vt_flash_newton(mix, nmol, volume, RT, StateVariables[; tol, chemtol, presstol, maxiter])
 
 Find VT-equilibrium of `mix`, at given `nmol`, `volume` and thermal energy `RT`
 using Newton's minimization.
@@ -326,8 +328,9 @@ function vt_flash_newton(
     volume::Real,
     RT::Real,
     StateVariables::Type{<:AbstractVTFlashState};
-    chematol::Real=1024*eps(T),
-    presstol::Real=1024*eps(T),
+    tol::Real=1024*eps(T),
+    chemtol::Real=tol,
+    presstol::Real=tol,
     maxiter::Int=100,
 ) where {T}
     singlephase, stability_tries = vt_stability(mix, nmol, volume, RT)
@@ -355,7 +358,7 @@ function vt_flash_newton(
     state = StateVariables(concentration, saturation, nmol, volume)
 
     return vt_flash_newton!(state, mix, nmol, volume, RT;
-        chematol=chematol,
+        chemtol=chemtol,
         presstol=presstol,
         maxiter=maxiter
     )

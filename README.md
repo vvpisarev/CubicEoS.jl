@@ -1,54 +1,101 @@
 # CubicEoS.jl
-The package implements functions to work with substances and mixtures described by cubic equations of state.
+
+[![Code Style: Blue](https://img.shields.io/badge/code%20style-blue-4495d1.svg)](https://github.com/invenia/BlueStyle)
+
+CubicEoS.jl implements functions to work with substances and mixtures described by cubic equations of state. This includes
+
+- Basic thermodynamics: pressure, z-factor, chemical potential etc.;
+- Check of NVT stability of single-phase state;
+- Phase equilibrium calculation for NVT variables.
 
 So far, the general cubic equation of state [[Brusilovsky, SPE Reservoir Engineering, February 1992](https://doi.org/10.2118/20180-PA)] is implemented.
 
+Most of implemented functions
+
+- are designed in a zero-allocating way, such functions has optional `buf` keyword;
+- has a desctructive option `func!`.
+
+## Installation
+
+The package registry is **[LammpsToolsRegistry](https://github.com/stepanzh-test-org/LammpsToolsRegistry)**. So, you need to add the registry and then install CubicEoS.jl in a usual Julia-way.
+
+```julia
+]pkg> registry add https://github.com/stepanzh-test-org/LammpsToolsRegistry
+pkg> add CubicEoS
+```
+
 ## Brusilovsky equation of state
 
-To construct an set of parameters for a component, use
+Components and mixtures may be constructed either explicitly or by loading.
+
+A **component** can be defined explicitly
 ```julia
-BrusilovskyEoSComponent(;name="No Name", critical_pressure, critical_temperature, acentric_factor, Omegac, Zc, Psi, molar_mass, carbon_number::Integer)
+BrusilovskyEoSComponent(; name="No Name", critical_pressure, critical_temperature, acentric_factor, Omegac, Zc, Psi, molar_mass, carbon_number::Integer)
 ```
-The values of parameters `Omegac`, `Zc` and `Psi` for hydrocarbons may be found in Brusilovsky's paper (https://doi.org/10.2118/20180-PA).
+where the values of parameters `Omegac`, `Zc` and `Psi` may be found in Brusilovsky's paper (https://doi.org/10.2118/20180-PA).
 
 The temperatures must be in absolute scale (e.g., in Kelvins).
 
-The parameters can be loaded from a file (using **CubicEoSDatabase.jl**):
+Or, the component can be loaded from a file (using **[CubicEoSDatabase.jl](https://github.com/stepanzh/CubicEoSDatabase.jl)**)
 ```julia
-methane = load(BrusilovskyEoSComponent, name = "methane", physics_db = "martinez.csv", eos_db = "brusilovsky.csv")
+methane = CubicEoS.load(BrusilovskyEoSComponent; name="methane"[, custom_databases...])
 ```
 
-Mixtures are constructed via
+A **mixture** is constructed via
+
 ```julia
 BrusilovskyEoSMixture(; components::AbstractVector{<:BrusilovskyEoSComponent}, constant, linear, quadratic)
 ```
 where `constant`, `linear` and `quadratic` are matrices of constant, linear and quadratic in temperature terms for Zudkevitch-Joffe corrections.
 
-The parameters can be loaded from a file (using **CubicEoSDatabase.jl**):
+Or can be loaded from a file (using **[CubicEoSDatabase.jl](https://github.com/stepanzh/CubicEoSDatabase.jl)**):
 ```julia
-c1c5 = load(BrusilovskyEoSMixture, names = ["methane", "n-pentane", comp_physics_db = "martinez.csv", comp_eos_db = "brusilovsky.csv", mix_eos_db = "brusilovsky_mix.csv")
+c1c5 = CubicEoS.load(BrusilovskyEoSMixture; names=("methane", "n-pentane")[, custom_databases...])
 ```
 
 ## Basic thermodynamics
 
-To get the pressure of a pure component:
+Basic thermodynamics includes pressure, Wilson saturation pressure and z-factor (`compressibility`).
+
 ```julia
-pressure(component; nmol, volume, temperature)
+pressure(component or mixture, nmol, volume, temperature)
 ```
 
-To get the estimate of the saturation pressure at a given temperature:
 ```julia
 wilson_saturation_pressure(component, RT)
 ```
 
-To get compressibility at given pressure and temperature:
 ```julia
-compressibility(mixture, molar_composition, pressure, RT, phase = 'g'
+compressibility(mixture, molar_composition, pressure, RT, phase='g')
 ```
 
-## Phase stability
+## Chemical potential
 
-To check if a single-phase state is stable:
+The packages includes functions for calculating activity coefficient and its Jacobian matrix for a mixture defined by Brusilovsky EoS.
+
 ```julia
-vt_stability(mix::BrusilovskyEoSMixture, nmol::AbstractVector, volume, RT)
+log_ca = log_c_activity(mixture, nmol, volume, RT)
+log_ca, jac = log_c_activity_wj(mixture, nmol, volume, RT)
 ```
+
+In case of a component you may use a mixture of one component.
+
+## NVT phase equilibrium
+
+**Phase stability.** To check if a single-phase state is stable, defined in NVT variables, use
+
+```julia
+isstable, vtstab_results = vt_stability(mix, nmol, volume, RT)
+```
+
+**Flash.** To calculate NVT phase equilibrium use
+
+```julia
+# quasi-Newton phase split
+flash_result = vt_flash(mix, nmol, volume, RT, StateVariables[; tol, maxiter])
+# Newton phase split
+flash_result = vt_flash_newton(mix, nmol, volume, RT, StateVariables[; tol, maxiter])
+```
+
+where type `StateVariables` defines an internal variables used at phase split stage in optimization solver (e.g. `CubicEoS.PhysicalState`). Quasi-Newton solver is implemented in **[Downhill.jl](https://github.com/vvpisarev/Downhill.jl)**.
+

@@ -1,9 +1,6 @@
 #=
 VT stability algorithm
 =#
-
-using DescentMethods
-
 struct VTStabilityBuffer{B}
     solver_buffer::B
 end
@@ -110,14 +107,11 @@ function vt_stability_optim_try!(
     is_converged = false
 
     try
-        result = DescentMethods.optimize!(
-            optmethod,
-            Dfunc!,
-            η_,
+        result = Downhill.optimize!(Dfunc!, optmethod, η_;
             gtol=1e-3,
             maxiter=1000,
             constrain_step=maxstep,
-            reset=false
+            reset=false,
         )
         is_converged = result.converged
     catch e
@@ -192,7 +186,7 @@ function vt_stability(
         for i in 1:nc
             jacobian[i,i] += 1 / nmol_test[i]
         end
-        DescentMethods.reset!(optmethod, nmol_test, jacobian)
+        Downhill.reset!(optmethod, nmol_test, jacobian)
         return vt_stability_optim_try!(
             optmethod,
             nmol_test,
@@ -202,7 +196,7 @@ function vt_stability(
         )
     end
 
-    optmethod = DescentMethods.CholBFGS(nmol)
+    optmethod = Downhill.CholBFGS(nmol)
     results = Vector{VTStabilityResult{T}}(undef, 4)
 
     # Initial - gas

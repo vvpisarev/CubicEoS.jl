@@ -14,10 +14,8 @@
         CubicEoS.IdealIdentityState,
     )
 
-    # Just works tests
-    @testset "Converged" begin
-        @test converged(vt_flash(mix, nmol, volume, RT))
-        for ST in StateTypes
+    for ST in StateTypes
+        @testset "Flash converged for $ST" begin
             @test converged(vt_flash(mix, nmol, volume, RT, ST))
         end
     end

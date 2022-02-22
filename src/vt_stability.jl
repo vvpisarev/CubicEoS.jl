@@ -114,7 +114,11 @@ function vt_stability_optim_try!(
         )
         isfinished = true
     catch e
-        @warn e
+        if e isa InterruptException
+            rethrow(e)
+        else
+            @warn "$(sprint(showerror, e))"
+        end
     end
 
     Dtry = isfinished ? Downhill.fnval(optmethod) : NaN

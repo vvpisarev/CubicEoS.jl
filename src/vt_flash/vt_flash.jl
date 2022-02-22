@@ -69,7 +69,9 @@ function vt_flash(
     presstol::Real=tol,
     maxiter::Integer=100,
 ) where {T}
-    singlephase, stability_tries = vt_stability(mix, nmol, volume, RT)
+    stabconverged, singlephase, stability_tries = vt_stability(mix, nmol, volume, RT)
+
+    !stabconverged && error("VT-Stability does not converged")
 
     if singlephase
         concentration = nmol ./ volume
@@ -326,7 +328,7 @@ function __vt_flash_init_conc_choose(
     Dmin = T(Inf)
     index_min = -1
     for (i, state) in enumerate(vt_stab_tries)
-        if !state.isstable && state.energy_density < Dmin
+        if state.converged && !state.isstable && state.energy_density < Dmin
             index_min = i
             Dmin = state.energy_density
         end

@@ -1,16 +1,5 @@
 @testset "solvecubic.jl" begin
-    mix = load(BrusilovskyEoSMixture; names=("methane",))
     solve_cubic = CubicEoS.solve_cubic
-
-    @testset "Unstable 1-phase state" begin
-        # definitely inside "bulk" of two-phase region
-        @test !first(vt_stability(mix, [0.01], 1e-6, CubicEoS.GAS_CONSTANT_SI * 140.0))
-    end
-
-    @testset "Degenerate equation" begin
-        @test first(vt_stability(mix, [0.0109], 1e-6, 1588.0623600672689))
-        @test first(vt_stability(mix, [0.0109], 1e-6, CubicEoS.GAS_CONSTANT_SI * 190.6))
-    end
 
     @testset "Triple root" begin
         @test solve_cubic(1, -3, 3, -1) == (1.0, 1.0, 1.0)

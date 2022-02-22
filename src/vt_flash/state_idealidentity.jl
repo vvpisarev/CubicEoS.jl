@@ -130,7 +130,36 @@ function __vt_flash_optim_closures(
     # Necessary for constrain_step
     xupperfromdef = [π * sqrt.(nmolb); sqrt(sum(nmolb))]
 
-    # covolumes = [nmolb .* components(mix).b; -volumeb]
+    BASECOVDIFF = dot(nmolb, components(mix).b) - volumeb
+
+    "Check of covolume constrain for phases."
+    function iscovmeet(x::AbstractVector, α::Real, d::AbstractVector)
+        phaseterm = zero(Float64)
+        for (xᵢ, dᵢ, nᵢ, bᵢ) in zip(x[1:end-1], d[1:end-1], nmolb, components(mix).b)
+            phaseterm += nᵢ * bᵢ * sin((xᵢ + α*dᵢ)/(2*sqrt(nᵢ)))^2
+        end
+        volterm = volumeb * (x[end] + α * d[end]) / sqrt(sum(nmolb))
+        cond1 = phaseterm ≤ volterm
+        cond2 = BASECOVDIFF - volumeb ≤ phaseterm - volterm
+        return cond1 && cond2
+    end
+
+    "Linear approximation to covolume condition for phase 1: `constant + α linear ≤ 0`."
+    function covcondfactors(x::AbstractVector, d::AbstractVector)
+        constant = zero(Float64)
+        linear = zero(Float64)
+
+        for (xᵢ, dᵢ, nᵢ, bᵢ) in zip(x[1:end-1], d[1:end-1], nmolb, components(mix).b)
+            sqrtnᵢ = sqrt(nᵢ)
+            constant += nᵢ * bᵢ * sin(xᵢ/(2*sqrtnᵢ))^2
+            linear += sqrtnᵢ * bᵢ * sin(xᵢ/sqrtnᵢ) * dᵢ
+        end
+        constant -= volumeb / sqrt(sum(nmolb)) * x[end]
+        linear /= 2
+        linear -= volumeb * d[end] / sqrt(sum(nmolb))
+
+        return constant, linear
+    end
 
     function clsr_constrain_step(x::AbstractVector, dir::AbstractVector)
         state1x .= x
@@ -145,14 +174,9 @@ function __vt_flash_optim_closures(
             α = di < 0 ? min(α, -xi/di) : min(α, (ui - xi)/di)
         end
 
-        # ## covolumes
-        # state1xdotcov = dot(state1x, covolumes)
-        # dirdotcov = dot(dir, covolumes)
-        # if dirdotcov > 0
-        #     α = min(α, -state1xdotcov/dirdotcov)
-        # elseif dirdotcov < 0
-        #     α = min(α, (sum(covolumes) - state1xdotcov)/dirdotcov)
-        # end
+        ## covolumes
+        covconst, covlin = covcondfactors(x, dir)
+        α = covlin > 0 ? min(α, -covconst/covlin) : min(α, (BASECOVDIFF - covconst)/covlin)
 
         # Finding lower limit
         ## Non-negativness
@@ -160,15 +184,17 @@ function __vt_flash_optim_closures(
         for (xi, di, ui) in zip(state1x, dir, xupperfromdef)
             αlo = !iszero(di) && di > 0 ? max(αlo, -xi/di) : max(αlo, (ui - xi)/di)
         end
-
-        # ## covolumes
-        # if dirdotcov < 0
-        #     αlo = max(αlo, -state1xdotcov/dirdotcov)
-        # elseif dirdotcov > 0
-        #     αlo = max(αlo, (sum(covolumes)-state1xdotcov)/dirdotcov)
-        # end
+        αlo = max(zero(αlo), αlo)
+        ## covolumes
+        αlo = covlin < 0 ? max(αlo, -covconst/covlin) : max(αlo, (BASECOVDIFF - covconst)/covlin)
 
         α ≤ αlo && throw(ConstrainStepLowerBoundError(x, dir))
+
+        # Check that α suitable for original covolume constrain
+        # Actually, sometimes do not work, but optimization goes OK.
+        # Perhaps, because of bad approximation of covolume constrain,
+        # and α is limitted by non-negativness, which gives absence of second phase.
+        # !iscovmeet(x, α, dir) && error("ConstrainStep: step not found")
 
         return α
     end

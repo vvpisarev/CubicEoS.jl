@@ -253,7 +253,9 @@ function vt_flash_newton(
     presstol::Real=tol,
     maxiter::Int=100,
 ) where {T}
-    singlephase, stability_tries = vt_stability(mix, nmol, volume, RT)
+    stabconverged, singlephase, stability_tries = vt_stability(mix, nmol, volume, RT)
+
+    !stabconverged && error("VT-Stability does not converged")
 
     if singlephase
         concentration = nmol ./ volume

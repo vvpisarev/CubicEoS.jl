@@ -77,13 +77,13 @@ See also: [`vt_stability`](@ref), [`thermo_buffer`](@ref)
 vt_stability_buffer(x) = VTStabilityBuffer(x)
 
 struct VTStabilityResult{T}
-    converged::Bool
+    issuccess::Bool
     isstable::Bool
     energy_density::T
     concentration::Vector{T}
 
-    function VTStabilityResult{T}(converged::Bool, isstable::Bool, energy_density, concentration) where {T}
-        return new{T}(converged, isstable, energy_density, copy(concentration))
+    function VTStabilityResult{T}(issuccess::Bool, isstable::Bool, energy_density, concentration) where {T}
+        return new{T}(issuccess, isstable, energy_density, copy(concentration))
     end
 end
 
@@ -236,12 +236,10 @@ function vt_stability(
     D_ll = D_min(nmol_test, optmethod)
     results[4] = VTStabilityResult{T}(!isnan(D_gl), D_ll ≥ thresh, D_ll, optmethod.x)
 
-    if isnan(D_gg) && isnan(D_gl) && isnan(D_lg) && isnan(D_ll)  # все 4 попытки провалились
-        error("VTStability: all tries have failed")
-    end
+    issuccess = any(x -> x.issuccess, results)
+    !issuccess && error("VTStability: all tries have failed")
 
-    converged = any(x -> x.converged, results)
-    isstable = all(x -> x.isstable, results)
+    isstable = !any(x -> x.issuccess && !x.isstable, results)
 
-    return converged, isstable, results
+    return issuccess, isstable, results
 end

@@ -104,19 +104,22 @@ function vt_stability_optim_try!(
     Dfunc!::Function,  # функция D вида D!(η', ∇D_) -> D::Number
     maxstep::Function,
 )
-    optresult = Downhill.optimize!(Dfunc!, optmethod, η_;
-        gtol=1e-3,
-        maxiter=1000,
-        constrain_step=maxstep,
-        reset=false,
-    )
-
-    if optresult.converged
-        D_min, _ = Dfunc!(optmethod.x, grad_)
-    else
-        D_min = NaN
+    isfinished = false
+    try
+        optresult = Downhill.optimize!(Dfunc!, optmethod, η_;
+            gtol=1e-3,
+            maxiter=1000,
+            constrain_step=maxstep,
+            reset=false,
+        )
+        isfinished = true
+    catch e
+        @warn e
     end
-    return D_min
+
+    Dtry = isfinished ? Downhill.fnval(optmethod) : NaN
+
+    return Dtry
 end
 
 function vt_stability(

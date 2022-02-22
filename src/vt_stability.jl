@@ -77,13 +77,13 @@ See also: [`vt_stability`](@ref), [`thermo_buffer`](@ref)
 vt_stability_buffer(x) = VTStabilityBuffer(x)
 
 struct VTStabilityResult{T}
-    # converged::Bool  # for future
+    converged::Bool
     isstable::Bool
     energy_density::T
     concentration::Vector{T}
 
-    function VTStabilityResult{T}(isstable::Bool, energy_density, concentration) where {T}
-        return new{T}(isstable, energy_density, copy(concentration))
+    function VTStabilityResult{T}(converged::Bool, isstable::Bool, energy_density, concentration) where {T}
+        return new{T}(converged, isstable, energy_density, copy(concentration))
     end
 end
 
@@ -104,21 +104,18 @@ function vt_stability_optim_try!(
     Dfunc!::Function,  # функция D вида D!(η', ∇D_) -> D::Number
     maxstep::Function,
 )
-    is_converged = false
+    optresult = Downhill.optimize!(Dfunc!, optmethod, η_;
+        gtol=1e-3,
+        maxiter=1000,
+        constrain_step=maxstep,
+        reset=false,
+    )
 
-    try
-        result = Downhill.optimize!(Dfunc!, optmethod, η_;
-            gtol=1e-3,
-            maxiter=1000,
-            constrain_step=maxstep,
-            reset=false,
-        )
-        is_converged = result.converged
-    catch e
-        @warn e
-        is_converged = false
+    if optresult.converged
+        D_min, _ = Dfunc!(optmethod.x, grad_)
+    else
+        D_min = NaN
     end
-    D_min, _ = Dfunc!(optmethod.x, grad_)
     return D_min
 end
 
@@ -208,14 +205,14 @@ function vt_stability(
     nmol_test .*= p_init / (z_gg * RT * sum(nmol_test))
 
     D_gg = D_min(nmol_test, optmethod)
-    results[1] = VTStabilityResult{T}(D_gg ≥ thresh, D_gg, optmethod.x)
+    results[1] = VTStabilityResult{T}(!isnan(D_gg), D_gg ≥ thresh, D_gg, optmethod.x)
 
     # Test - liquid
     z_gl = compressibility(mix, nmol_test, p_init, RT, 'l')
     nmol_test .*= z_gg / z_gl
 
     D_gl = D_min(nmol_test, optmethod)
-    results[2] = VTStabilityResult{T}(D_gl ≥ thresh, D_gl, optmethod.x)
+    results[2] = VTStabilityResult{T}(!isnan(D_gl), D_gl ≥ thresh, D_gl, optmethod.x)
 
     # Initial - liquid
     nmol_test .= nmol ./ p_sat ./ sum(nmol[i] / p_sat[i] for i in 1:nc)
@@ -227,20 +224,21 @@ function vt_stability(
     nmol_test .*= p_init / (z_lg * RT * sum(nmol_test))
 
     D_lg = D_min(nmol_test, optmethod)
-    results[3] = VTStabilityResult{T}(D_lg ≥ thresh, D_lg, optmethod.x)
+    results[3] = VTStabilityResult{T}(!isnan(D_gl), D_lg ≥ thresh, D_lg, optmethod.x)
 
     # Test - liquid
     z_ll = compressibility(mix, nmol_test, p_init, RT, 'l')
     nmol_test .*= z_lg / z_ll
 
     D_ll = D_min(nmol_test, optmethod)
-    results[4] = VTStabilityResult{T}(D_ll ≥ thresh, D_ll, optmethod.x)
+    results[4] = VTStabilityResult{T}(!isnan(D_gl), D_ll ≥ thresh, D_ll, optmethod.x)
 
     if isnan(D_gg) && isnan(D_gl) && isnan(D_lg) && isnan(D_ll)  # все 4 попытки провалились
         error("VTStability: all tries have failed")
     end
 
-    isstable = results[1].isstable && results[2].isstable && results[3].isstable && results[4].isstable
+    converged = any(x -> x.converged, results)
+    isstable = all(x -> x.isstable, results)
 
-    return isstable, results
+    return converged, isstable, results
 end

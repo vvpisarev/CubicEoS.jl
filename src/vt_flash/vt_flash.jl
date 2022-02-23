@@ -328,7 +328,7 @@ function __vt_flash_init_conc_choose(
     Dmin = T(Inf)
     index_min = -1
     for (i, state) in enumerate(vt_stab_tries)
-        if state.converged && !state.isstable && state.energy_density < Dmin
+        if state.issuccess && !state.isstable && state.energy_density < Dmin
             index_min = i
             Dmin = state.energy_density
         end

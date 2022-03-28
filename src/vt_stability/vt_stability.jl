@@ -1,3 +1,6 @@
+include("types.jl")
+include("nvt.jl")
+
 #=
 VT stability algorithm
 =#

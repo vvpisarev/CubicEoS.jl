@@ -2,15 +2,25 @@
 Dimensionless tangent plane distance (TPD) function of Helmholtz free energy.
 """
 function helmholtztpd(
-    basestate::VTStabilityBaseState,
-    concentration::AbstractVector;
+    concentration::AbstractVector,
+    basestate::VTStabilityBaseState;
     buf::AbstractEoSThermoBuffer=thermo_buffer(basestate.mixture),
 )
     gradient = similar(basestate.logcactivity)
-    gradient = helmholtztpdgradient!(gradient, basestate, concentration; buf=buf)
+    tpd, gradient = helmholtztpdwgradient!(gradient, concentration, basestate; buf=buf)
+    return tpd
+end
+
+function helmholtztpdwgradient!(
+    gradient::AbstractVector,
+    concentration::AbstractVector,
+    basestate::VTStabilityBaseState;
+    buf::AbstractEoSThermoBuffer=thermo_buffer(basestate.mixture),
+)
+    gradient = helmholtztpdgradient!(gradient, concentration, basestate; buf=buf)
     ptest = pressure(basestate.mixture, concentration, 1, basestate.RT; buf=buf)
     tpd = (-ptest + basestate.pressure) / basestate.RT + dot(concentration, gradient)
-    return tpd
+    return tpd, gradient
 end
 
 """
@@ -18,8 +28,8 @@ end
 """
 function helmholtztpdgradient!(
     gradient::AbstractVector,
-    basestate::VTStabilityBaseState,
-    concentration::AbstractVector;
+    concentration::AbstractVector,
+    basestate::VTStabilityBaseState;
     buf::AbstractEoSThermoBuffer=thermo_buffer(basestate.mixture),
 )
     gradient = log_c_activity!(gradient, basestate.mixture, concentration, 1, basestate.RT;
@@ -37,8 +47,8 @@ Hessian of TPD: Hᵢⱼ = δᵢⱼ / c'ᵢ + ∂(ln γᵢ) / ∂c'ⱼ.
 """
 function helmholtztpdhessian!(
     hessian::AbstractMatrix,
-    basestate::VTStabilityBaseState,
-    concentration::AbstractVector;
+    concentration::AbstractVector,
+    basestate::VTStabilityBaseState;
     buf::AbstractEoSThermoBuffer=thermo_buffer(basestate.mixture),
 )
     aux = similar(basestate.logcactivity)  # don't need logs of activity coefficients

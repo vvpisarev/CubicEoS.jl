@@ -1,5 +1,54 @@
 include("types.jl")
 include("nvt.jl")
+include("state_abstract.jl")
+include("state_physical.jl")
+
+function vt_stability(
+    mixture,
+    nmol,
+    volume,
+    RT,
+    StateVariables::Type{<:AbstractVTStabilityState},
+)
+    buf = thermo_buffer(mixture)
+    # form base state
+    basestate = VTStabilityBaseState(mixture, nmol, volume, RT; buf=buf)
+
+    # prepare TPD closures: TPD, gradient, constrain_step
+    tpd!, tpdgrad! = __vt_stability_tpd_closures!(StateVariables, basestate; buf=buf)
+
+    # prepare stop criterion closure
+
+    # prepare initial guesses
+    # run optimizer for each guess
+    # return
+end
+
+function __vt_stability_tpd_closures!(
+    StateVariables::Type{<:AbstractVTStabilityState},
+    basestate::VTStabilityBaseState;
+    buf::AbstractEoSThermoBuffer=thermo_buffer(basestate.mixture),
+)
+    # for internal usage
+    trialstate = StateVariables(similar(basestate.logconcentration))
+    trialx = value(trialstate)
+
+    function clsr_tpd!(x::AbstractVector, g::AbstractVector)
+        trialx .= x
+        tpd, g = helmholtztpdwgradient!(g, trialstate, basestate; buf=buf)
+        return tpd, g
+    end
+
+    function clsr_tpdgrad!(g::AbstractVector, x::AbstractVector)
+        trialx .= x
+        g = helmholtztpdgradient!(g, trialstate, basestate; buf=buf)
+        return g
+    end
+
+    return clsr_tpd!, clsr_tpdgrad!
+end
+
+#= OLD code goes down =#
 
 #=
 VT stability algorithm

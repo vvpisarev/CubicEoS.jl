@@ -6,10 +6,10 @@ struct VTStabilityBaseState{F<:Real,V<:AbstractVector{<:F},M<:BrusilovskyEoSMixt
     pressure::F
 end
 
-function VTStabilityBaseState(mixture, nmol, volume, RT)
+function VTStabilityBaseState(mixture, nmol, volume, RT; buf=thermo_buffer(mixture))
     logconc = log.(nmol ./ volume)
     RT = float(RT)
-    logcactivity = log_c_activity(mixture, nmol, volume, RT)
-    pres = pressure(mixture, nmol, volume, RT)
+    logcactivity = log_c_activity(mixture, nmol, volume, RT; buf=buf)
+    pres = pressure(mixture, nmol, volume, RT; buf=buf)
     return VTStabilityBaseState(logconc, RT, mixture, logcactivity, pres)
 end

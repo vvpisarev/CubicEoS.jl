@@ -8,14 +8,15 @@ function vt_stability(
     nmol,
     volume,
     RT,
-    StateVariables::Type{<:AbstractVTStabilityState},
-)
+    ::Type{StateVariables},
+) where {StateVariables<:AbstractVTStabilityState}
     buf = thermo_buffer(mixture)
     # form base state
     basestate = VTStabilityBaseState(mixture, nmol, volume, RT; buf=buf)
 
     # prepare TPD closures: TPD, gradient, constrain_step
-    tpd!, tpdgrad! = __vt_stability_tpd_closures!(StateVariables, basestate; buf=buf)
+    tpd!, tpdgrad! = __vt_stability_tpd_closures(StateVariables, basestate; buf=buf)
+    constrain_step = __vt_stability_step_closure(StateVariables, basestate.mixture.components.b)
 
     # prepare stop criterion closure
 
@@ -24,7 +25,7 @@ function vt_stability(
     # return
 end
 
-function __vt_stability_tpd_closures!(
+function __vt_stability_tpd_closures(
     StateVariables::Type{<:AbstractVTStabilityState},
     basestate::VTStabilityBaseState;
     buf::AbstractEoSThermoBuffer=thermo_buffer(basestate.mixture),
@@ -46,6 +47,17 @@ function __vt_stability_tpd_closures!(
     end
 
     return clsr_tpd!, clsr_tpdgrad!
+end
+
+function __vt_stability_step_closure(
+    ::Type{StateVariables},
+    covolumes::AbstractVector,
+) where {StateVariables<:AbstractVTStabilityState}
+    function clsr(x::AbstractVector, direction::AbstractVector)
+        return __constrain_step(StateVariables, x, direction, covolumes)
+    end
+
+    return clsr
 end
 
 #= OLD code goes down =#

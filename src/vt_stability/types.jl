@@ -13,3 +13,8 @@ function VTStabilityBaseState(mixture, nmol, volume, RT; buf=thermo_buffer(mixtu
     pres = pressure(mixture, nmol, volume, RT; buf=buf)
     return VTStabilityBaseState(logconc, RT, mixture, logcactivity, pres)
 end
+
+abstract type AbstractVTStabilityState end
+
+value(state::AbstractVTStabilityState) = state.x
+concentration(state::AbstractVTStabilityState) = error("Not implemented")

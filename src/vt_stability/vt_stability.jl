@@ -8,9 +8,9 @@ function vt_stability(
     nmol,
     volume,
     RT,
-    ::Type{StateVariables},
+    ::Type{StateVariables};
+    buf::AbstractEoSThermoBuffer=thermo_buffer(mixture)
 ) where {StateVariables<:AbstractVTStabilityState}
-    buf = thermo_buffer(mixture)
     # form base state
     basestate = VTStabilityBaseState(mixture, nmol, volume, RT; buf=buf)
 
@@ -21,6 +21,7 @@ function vt_stability(
     # prepare stop criterion closure
 
     # prepare initial guesses
+    trial_concentrations = vt_stability_initials_satpressure(mixture, nmol, RT; buf=buf)
     # run optimizer for each guess
     # return
 end
@@ -107,6 +108,43 @@ function __vt_stability_step_closure(
         return __constrain_step(StateVariables, x, direction, covolumes)
     end
     return clsr
+end
+
+# TODO: Check if zfactors are distinct
+# TODO: DRY
+function vt_stability_initials_satpressure(
+    mixture::AbstractEoSMixture,
+    nmolbase::AbstractVector,
+    RT::Real;
+    buf::AbstractEoSThermoBuffer=thermo_buffer(mixture),
+)
+    psat = wilson_saturation_pressure.(mixture.components, RT)
+
+    # Base is liquid, trial is vapor/liquid
+    p_baseliquid = dot(psat, nmolbase) / sum(nmolbase)
+    molfrac_trialvapor = (psat ./ p_baseliquid) .* (nmolbase ./ sum(nmolbase))
+    zroots_baseliquid = zfactors(mixture, molfrac_trialvapor, p_baseliquid, RT; buf=buf)
+
+    conc_trial_lv = let z = zfactorchoose(zroots_baseliquid, 'g')
+        p_baseliquid .* molfrac_trialvapor ./ (z * RT)
+    end
+    conc_trial_ll = let z = zfactorchoose(zroots_baseliquid, 'l')
+        p_baseliquid .* molfrac_trialvapor ./ (z * RT)
+    end
+
+    # Base is vapor, trial is vapor/liquid
+    molfrac_trialliquid = (nmolbase ./ psat) ./ sum(nmolbase ./ psat)
+    p_basevapor = dot(psat, molfrac_trialliquid)
+    zroots_basevapor = zfactors(mixture, molfrac_trialliquid, p_basevapor, RT; buf=buf)
+
+    conc_trial_vv = let z = zfactorchoose(zroots_basevapor, 'g')
+        p_basevapor .* molfrac_trialliquid ./ (z * RT)
+    end
+    conc_trial_vl = let z = zfactorchoose(zroots_basevapor, 'l')
+        p_basevapor .* molfrac_trialliquid ./ (z * RT)
+    end
+
+    return (conc_trial_lv, conc_trial_ll, conc_trial_vv, conc_trial_vl)
 end
 
 #= OLD code goes down =#

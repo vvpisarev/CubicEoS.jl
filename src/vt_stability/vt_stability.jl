@@ -9,7 +9,7 @@ function vt_stability(
     volume,
     RT,
     ::Type{StateVariables};
-    buf::AbstractEoSThermoBuffer=thermo_buffer(mixture)
+    buf::AbstractEoSThermoBuffer=thermo_buffer(mixture),
 ) where {StateVariables<:AbstractVTStabilityState}
     # form base state
     basestate = VTStabilityBaseState(mixture, nmol, volume, RT; buf=buf)
@@ -18,12 +18,27 @@ function vt_stability(
     tpd_fdf!, tpd_df! = __vt_stability_tpd_closures(StateVariables, basestate; buf=buf)
     constrain_step = __vt_stability_step_closure(StateVariables, basestate.mixture.components.b)
 
-    # prepare stop criterion closure
+    # TODO: prepare stop criterion closure
 
     # prepare initial guesses
     trial_concentrations = vt_stability_initials_satpressure(mixture, nmol, RT; buf=buf)
+
     # run optimizer for each guess
-    # return
+    optmethod = Downhill.CholBFGS(basestate.logconcentration)
+    results = map(trial_concentrations) do concentration
+        trialstate = fromconcentration(StateVariables, concentration)
+        return vt_stability!(trialstate, basestate, optmethod;
+            tpd_fdf! = tpd_fdf!,
+            constrain_step=constrain_step,
+            tpd_thresh=-1e-5,
+            maxiter=200,
+            buf=buf,
+        )
+    end
+    # TODO: issucces flag. Do we need it?
+    isstable = all(x -> x.isstable, results)
+    # issuccess just true, because there is no try/catch in optimize
+    return true, isstable, results
 end
 
 function vt_stability!(
@@ -55,11 +70,11 @@ function vt_stability!(
 
     # Result
     tpd_val = Downhill.fnval(optmethod)
-    isstable = tpd_val < -abs(tpd_thresh)
+    isstable = tpd_val ≥ -abs(tpd_thresh)
     testconc = concentration(trialstate)
-    optim = OptimStats(optimresult.converged, optimresult.iters, optimresult.calls)
+    optim = OptimStats(optimresult.converged, optimresult.iterations, optimresult.calls)
 
-    return __dev_VTStabilityResult(isstable, tpd_val, testconc, trialstate, optim)
+    return __dev_VTStabilityResult(true, isstable, tpd_val, testconc, trialstate, optim)
 end
 
 struct OptimStats
@@ -69,6 +84,7 @@ struct OptimStats
 end
 
 struct __dev_VTStabilityResult{T<:Real,S<:AbstractVTStabilityState}
+    issuccess::Bool
     isstable::Bool
     energy_density::T
     concentration::Vector{T}

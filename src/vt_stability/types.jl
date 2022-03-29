@@ -18,3 +18,4 @@ abstract type AbstractVTStabilityState end
 
 value(state::AbstractVTStabilityState) = state.x
 concentration(state::AbstractVTStabilityState) = error("Not implemented")
+fromconcentration(::Type{S}, x) where {S<:AbstractVTStabilityState} = error("Not implemented")

@@ -15,7 +15,7 @@ function vt_stability(
     basestate = VTStabilityBaseState(mixture, nmol, volume, RT; buf=buf)
 
     # prepare TPD closures: TPD, gradient, constrain_step
-    tpd!, tpdgrad! = __vt_stability_tpd_closures(StateVariables, basestate; buf=buf)
+    tpd_fdf!, tpd_df! = __vt_stability_tpd_closures(StateVariables, basestate; buf=buf)
     constrain_step = __vt_stability_step_closure(StateVariables, basestate.mixture.components.b)
 
     # prepare stop criterion closure
@@ -23,6 +23,56 @@ function vt_stability(
     # prepare initial guesses
     # run optimizer for each guess
     # return
+end
+
+function vt_stability!(
+    trialstate::AbstractVTStabilityState,
+    basestate::VTStabilityBaseState,
+    optmethod;
+    tpd_fdf!::Function,
+    constrain_step::Function,
+    tpd_thresh::Real=-1e-5,
+    maxiter::Integer=200,
+    buf::AbstractEoSThermoBuffer=thermo_buffer(basestate.mixture),
+)
+    testhessian = let n = ncomponents(basestate.mixture)
+        Matrix{Float64}(undef, (n, n))
+    end
+    testhessian = helmholtztpdhessian!(testhessian, trialstate, basestate; buf=buf)
+
+    teststatex = value(trialstate)
+    Downhill.reset!(optmethod, teststatex, testhessian)
+    optimresult = Downhill.optimize!(tpd_fdf!, optmethod, teststatex,
+        gtol=1e-3,
+        # TODO: convcond=convcond,
+        maxiter=maxiter,
+        constrain_step=constrain_step,
+        reset=false,
+    )
+    # Manually update trialstate
+    teststatex .= optimresult.argument
+
+    # Result
+    tpd_val = Downhill.fnval(optmethod)
+    isstable = tpd_val < -abs(tpd_thresh)
+    testconc = concentration(trialstate)
+    optim = OptimStats(optimresult.converged, optimresult.iters, optimresult.calls)
+
+    return __dev_VTStabilityResult(isstable, tpd_val, testconc, trialstate, optim)
+end
+
+struct OptimStats
+    converged::Bool
+    iters::Int
+    calls::Int
+end
+
+struct __dev_VTStabilityResult{T<:Real,S<:AbstractVTStabilityState}
+    isstable::Bool
+    energy_density::T
+    concentration::Vector{T}
+    state::S
+    optim::OptimStats
 end
 
 function __vt_stability_tpd_closures(
@@ -34,19 +84,19 @@ function __vt_stability_tpd_closures(
     trialstate = StateVariables(similar(basestate.logconcentration))
     trialx = value(trialstate)
 
-    function clsr_tpd!(x::AbstractVector, g::AbstractVector)
+    function clsr_tpd_fdf!(x::AbstractVector, g::AbstractVector)
         trialx .= x
         tpd, g = helmholtztpdwgradient!(g, trialstate, basestate; buf=buf)
         return tpd, g
     end
 
-    function clsr_tpdgrad!(g::AbstractVector, x::AbstractVector)
+    function clsr_tpd_df!(g::AbstractVector, x::AbstractVector)
         trialx .= x
         g = helmholtztpdgradient!(g, trialstate, basestate; buf=buf)
         return g
     end
 
-    return clsr_tpd!, clsr_tpdgrad!
+    return clsr_tpd_fdf!, clsr_tpd_df!
 end
 
 function __vt_stability_step_closure(
@@ -56,7 +106,6 @@ function __vt_stability_step_closure(
     function clsr(x::AbstractVector, direction::AbstractVector)
         return __constrain_step(StateVariables, x, direction, covolumes)
     end
-
     return clsr
 end
 

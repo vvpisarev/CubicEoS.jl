@@ -26,6 +26,7 @@ nmolvol(s::AbstractVTFlashState, nmolb, volumeb) = error("NotImplemented")
 
 (::Type{<:AbstractVTFlashState})(concentration, saturation, nmolb, volumeb) = error("NotImplemented")
 
+# TODO: deprecate in favor of OptimStats
 struct VTFlashOptimStats
     converged::Bool
     iters::Int

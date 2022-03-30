@@ -36,10 +36,13 @@ function vt_stability(
             buf=buf,
         )
     end
-    # TODO: issucces flag. Do we need it?
+
+    issuccess = any(x -> x.issuccess, results)
+    !issuccess && error("VTStability: all tries have failed")
+
     isstable = all(x -> x.isstable, results)
-    # issuccess just true, because there is no try/catch in optimize
-    return true, isstable, results
+
+    return issuccess, isstable, results
 end
 
 function vt_stability!(

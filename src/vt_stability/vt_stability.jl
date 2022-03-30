@@ -10,6 +10,9 @@ function vt_stability(
     volume,
     RT,
     ::Type{StateVariables};
+    tol::Real=1e-3,
+    tpd_thresh=-1e-5,
+    maxiter::Int=200,
     buf::AbstractEoSThermoBuffer=thermo_buffer(mixture),
 ) where {StateVariables<:AbstractVTStabilityState}
     # form base state
@@ -19,7 +22,8 @@ function vt_stability(
     tpd_fdf!, tpd_df! = __vt_stability_tpd_closures(StateVariables, basestate; buf=buf)
     constrain_step = __vt_stability_step_closure(StateVariables, basestate.mixture.components.b)
 
-    # TODO: prepare stop criterion closure
+    # prepare stop criterion closure
+    convcond = __vt_stability_convergence_closure(StateVariables, basestate, tol; buf=buf)
 
     # prepare initial guesses
     trial_concentrations = vt_stability_initials_satpressure(mixture, nmol, RT; buf=buf)
@@ -31,8 +35,9 @@ function vt_stability(
         return vt_stability!(trialstate, basestate, optmethod;
             tpd_fdf! = tpd_fdf!,
             constrain_step=constrain_step,
-            tpd_thresh=-1e-5,
-            maxiter=200,
+            convcond=convcond,
+            tpd_thresh=tpd_thresh,
+            maxiter=maxiter,
             buf=buf,
         )
     end
@@ -51,8 +56,9 @@ function vt_stability!(
     optmethod;
     tpd_fdf!::Function,
     constrain_step::Function,
+    convcond::Function,
     tpd_thresh::Real=-1e-5,
-    maxiter::Integer=200,
+    maxiter::Int=200,
     buf::AbstractEoSThermoBuffer=thermo_buffer(basestate.mixture),
 )
     testhessian = let n = ncomponents(basestate.mixture)
@@ -63,8 +69,7 @@ function vt_stability!(
     teststatex = value(trialstate)
     Downhill.reset!(optmethod, teststatex, testhessian)
     optimresult = Downhill.optimize!(tpd_fdf!, optmethod, teststatex,
-        gtol=1e-3,
-        # TODO: convcond=convcond,
+        convcond=convcond,
         maxiter=maxiter,
         constrain_step=constrain_step,
         reset=false,
@@ -128,6 +133,34 @@ function __vt_stability_step_closure(
         return __constrain_step(StateVariables, x, direction, covolumes)
     end
     return clsr
+end
+
+function __vt_stability_convergence_closure(
+    ::Type{StateVariables},
+    basestate::VTStabilityBaseState,
+    tol::Real;
+    buf::AbstractEoSThermoBuffer=thermo_buffer(basestate.mixture),
+) where {StateVariables<:AbstractVTStabilityState}
+    trial_concentration = similar(basestate.logconcentration)
+    trial_logcactivity = similar(basestate.logcactivity)
+    chemdiff = similar(basestate.logcactivity)
+    base_chempot = basestate.logconcentration + basestate.logcactivity
+
+    function clsr_convcond(x::V, xpre::V, y::T, ypre::T, g::V) where {T<:Real,V<:AbstractVector}
+        # No assignment here because of mutable capture
+        concentration!(trial_concentration, StateVariables, x)
+        log_c_activity!(
+            trial_logcactivity,
+            basestate.mixture,
+            trial_concentration,
+            1,
+            basestate.RT;
+            buf=buf,
+        )
+        @. chemdiff = log(trial_concentration) + trial_logcactivity - base_chempot
+        return maximum(abs, chemdiff) < abs(tol)
+    end
+    return clsr_convcond
 end
 
 # TODO: Check if zfactors are distinct

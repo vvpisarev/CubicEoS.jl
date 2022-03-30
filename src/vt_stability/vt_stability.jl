@@ -4,12 +4,50 @@ include("state_abstract.jl")
 include("state_physical.jl")
 include("state_idealidentity.jl")
 
-function vt_stability(
-    mixture,
-    nmol,
-    volume,
-    RT,
-    ::Type{StateVariables};
+"""
+    vt_stability(mixture, nmol, volume, RT, StateVariables[; tol=1e-3, tpd_thresh=-1e-5, maxiter=200, buf])
+
+Checks thermodynamical stability of single-phase state for `mixture` with composition `nmol`,
+occupying `volume` at thermal energy `RT`.
+Internally, runs direct minimization of dimensionless Helmholtz free energy TPD function (tangent plane distance)
+from each of initial guess.
+
+See also [`vt_stability!`](@ref).
+
+*Optimizer.* BFGS with modified Cholesky decomposition (see `Downhill.CholBFGS`).
+
+*Initialization.* Four guesses for the argument (Mikyska and Firoozabadi, Fluid Ph. Equil., 2012, 10.1016/j.fluid.2012.01.026).
+Initial Hessian is put to the optimizer.
+
+*`StateVariables.`* Available are
+- [`VTStabilityPhysicalState`](@ref);
+- [`VTStabilityIdealIdentityState`](@ref).
+
+*Convergence criterion.*
+
+```
+  1
+  -- maxᵢ (μ'ᵢ - μᵢ) < tolerance
+  RT
+```
+where μ'ᵢ is chemical potential of trial phase and μᵢ is chemical potential of base (bulk) phase.
+
+# Required arguments
+
+- `mixture`: a mixture described by an equation of state;
+- `nmol`: composition of the mixture, [mole];
+- `volume::Real`: volume of the mixture [meter³];
+- `RT`: thermal energy, `CubicEoS.GAS_CONSTANT_SI * temperature`, [Joule / mole];
+- `StateVariables::Type{<:AbstractVTStabilityState}`: variables used in minimization.
+
+# Optional arguments
+
+- `tol::Real=1e-3`: controls convergence criterion (see above);
+- `tpd_thresh::Real=-1e-5`: negative TPD value, below which state is considered unstable, formally [moles];
+- `maxiter::Int=200`: maximum number of iterations allowed per minimization;
+- `buf::AbstractEoSThermoBuffer`: cache structure, reduces allocations, by default is `thermo_buffer(mixture)`.
+"""
+function vt_stability(mixture, nmol, volume, RT, ::Type{StateVariables};
     tol::Real=1e-3,
     tpd_thresh=-1e-5,
     maxiter::Int=200,

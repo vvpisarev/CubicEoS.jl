@@ -8,7 +8,8 @@ struct VTStabilityPhysicalState{V<:AbstractVector} <: AbstractVTStabilityState
 end
 
 concentration(state::VTStabilityPhysicalState) = copy(value(state))
-fromconcentration(::Type{VTStabilityPhysicalState}, x) = VTStabilityPhysicalState(x)
+concentration!(c, ::Type{<:VTStabilityPhysicalState}, stval) = copy!(c, stval)
+fromconcentration(::Type{<:VTStabilityPhysicalState}, x) = VTStabilityPhysicalState(x)
 
 function helmholtztpdgradient!(
     gradient,

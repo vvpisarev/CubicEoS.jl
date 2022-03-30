@@ -12,11 +12,14 @@ struct VTStabilityIdealIdentityState{V<:AbstractVector} <: AbstractVTStabilitySt
     x::V
 end
 
-function concentration(state::VTStabilityIdealIdentityState)
-    return value(state).^2 / 4
+function concentration!(c, ::Type{<:VTStabilityIdealIdentityState}, stval)
+    @. c = stval^2 / 4
+    return c
 end
 
-function fromconcentration(::Type{VTStabilityIdealIdentityState}, x)
+concentration(state::VTStabilityIdealIdentityState) = value(state).^2 ./ 4
+
+function fromconcentration(::Type{<:VTStabilityIdealIdentityState}, x)
     vars = 2 .* sqrt.(x)
     return VTStabilityIdealIdentityState(vars)
 end

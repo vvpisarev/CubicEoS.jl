@@ -51,13 +51,33 @@ function helmholtztpdhessian!(
     basestate::VTStabilityBaseState;
     buf::AbstractEoSThermoBuffer=thermo_buffer(basestate.mixture),
 )
-    aux = similar(basestate.logcactivity)  # don't need logs of activity coefficients
-    aux, hessian = log_c_activity_wj!(
-        aux, hessian, basestate.mixture, concentration, 1, basestate.RT;
+    aux = similar(basestate.logcactivity)
+    aux, hessian = helmholtztpdgradienthessian!(aux, hessian, concentration, basestate;
         buf=buf
     )
+    return hessian
+end
+
+function helmholtztpdgradienthessian!(
+    gradient::AbstractVector,
+    hessian::AbstractMatrix,
+    concentration::AbstractVector,
+    basestate::VTStabilityBaseState;
+    buf::AbstractEoSThermoBuffer=thermo_buffer(basestate.mixture),
+)
+    gradient, hessian = log_c_activity_wj!(
+        gradient, hessian, basestate.mixture, concentration, 1, basestate.RT;
+        buf=buf
+    )
+
+    # Gradient
+    gradient .+= log.(concentration)
+    gradient .-= basestate.logconcentration
+    gradient .-= basestate.logcactivity
+
+    # Hessian diagonal
     @inbounds for (ci, hi) in zip(eachindex(concentration), diagind(hessian))
         hessian[hi] += 1 / concentration[ci]
     end
-    return hessian
+    return gradient, hessian
 end

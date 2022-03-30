@@ -48,12 +48,15 @@ function helmholtztpdhessian!(
     buf::AbstractEoSThermoBuffer=thermo_buffer(basestate.mixture),
 )
     trialconc = concentration(trialstate)
-    hessian = helmholtztpdhessian!(hessian, trialconc, basestate; buf=buf)
-    @. hessian *= sqrt(trialconc * trialconc')
-
     gradient = similar(trialconc)
-    gradient = helmholtztpdgradient!(gradient, trialconc, basestate; buf=buf)
 
+    # Concentration-dependant gradient and Hessian
+    gradient, hessian = helmholtztpdgradienthessian!(gradient, hessian, trialconc, basestate;
+        buf=buf
+    )
+
+    # Hessian scaling
+    @. hessian *= sqrt(trialconc * trialconc')
     @inbounds for (gi, hi) in zip(eachindex(gradient), diagind(hessian))
         hessian[hi] += gradient[gi] / 2
     end

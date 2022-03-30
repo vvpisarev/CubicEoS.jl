@@ -18,3 +18,11 @@ Base.showerror(io::IO, e::ConstrainStepLowerBoundError) = begin
     println(io, "x = ", repr(e.x))
     print(io, "direction = ", repr(e.dir))
 end
+
+struct ConstrainStepError{S} <: Exception
+    msg::S
+end
+
+Base.showerror(io::IO, e::ConstrainStepError) = begin
+    print(io, "ConstrainStepError:\n", e.msg)
+end

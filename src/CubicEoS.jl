@@ -13,6 +13,7 @@ using Downhill
 
 include("constants.jl")
 include("types.jl")
+include("error.jl")
 include("interface.jl")
 include("dbload.jl")
 include("basic_thermo.jl")

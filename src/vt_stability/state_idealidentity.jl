@@ -88,6 +88,7 @@ function __constrain_step(
     B = 2 * sum(x*d*b for (x, d, b) in zip(trialx, direction, covolumes))
     C = -4 + sum(x*x*b for (x, b) in zip(trialx, covolumes))
 
+    A < 0 && throw(ConstrainStepError("parabolic condition wrong"))
     αcov = solve_quadratic(A, B, C)
 
     # If there are one or zero roots, covolume inequality constraint has no solutions.

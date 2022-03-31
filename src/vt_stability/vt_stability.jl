@@ -50,7 +50,7 @@ where μ'ᵢ is chemical potential of trial phase and μᵢ is chemical potentia
 function vt_stability(mixture, nmol, volume, RT, ::Type{StateVariables};
     tol::Real=1e-3,
     tpd_thresh=-1e-5,
-    maxiter::Int=200,
+    maxiter::Int=1000,
     buf::AbstractEoSThermoBuffer=thermo_buffer(mixture),
 ) where {StateVariables<:AbstractVTStabilityState}
     # form base state
@@ -106,22 +106,34 @@ function vt_stability!(
 
     teststatex = value(trialstate)
     Downhill.reset!(optmethod, teststatex, testhessian)
-    optimresult = Downhill.optimize!(tpd_fdf!, optmethod, teststatex,
-        convcond=convcond,
-        maxiter=maxiter,
-        constrain_step=constrain_step,
-        reset=false,
-    )
+
+    isfinished = false
+    optim = OptimStats(false, -1, -1)
+    try
+        optimresult = Downhill.optimize!(tpd_fdf!, optmethod, teststatex,
+            convcond=convcond,
+            maxiter=maxiter,
+            constrain_step=constrain_step,
+            reset=false,
+        )
+        isfinished = true
+        optim = OptimStats(optimresult.converged, optimresult.iterations, optimresult.calls)
+    catch e
+        if e isa InterruptException
+            rethrow(e)
+        else
+            @warn "$(sprint(showerror, e))"
+        end
+    end
     # Manually update trialstate
-    teststatex .= optimresult.argument
+    teststatex .= Downhill.argumentvec(optmethod)
 
     # Result
     tpd_val = Downhill.fnval(optmethod)
     isstable = tpd_val ≥ -abs(tpd_thresh)
     testconc = concentration(trialstate)
-    optim = OptimStats(optimresult.converged, optimresult.iterations, optimresult.calls)
 
-    return __dev_VTStabilityResult(true, isstable, tpd_val, testconc, trialstate, optim)
+    return __dev_VTStabilityResult(isfinished, isstable, tpd_val, testconc, trialstate, optim)
 end
 
 struct OptimStats

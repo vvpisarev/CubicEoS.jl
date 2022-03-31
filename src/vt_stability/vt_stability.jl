@@ -4,8 +4,9 @@ include("state_abstract.jl")
 include("state_physical.jl")
 include("state_idealidentity.jl")
 
+
 """
-    vt_stability(mixture, nmol, volume, RT, StateVariables[; tol=1e-3, tpd_thresh=-1e-5, maxiter=200, buf])
+    vt_stability(mixture, nmol, volume, RT[, StateVariables; tol=1e-3, tpd_thresh=-1e-5, maxiter=200, buf])
 
 Checks thermodynamical stability of single-phase state for `mixture` with composition `nmol`,
 occupying `volume` at thermal energy `RT`.
@@ -38,7 +39,8 @@ where μ'ᵢ is chemical potential of trial phase and μᵢ is chemical potentia
 - `nmol`: composition of the mixture, [mole];
 - `volume::Real`: volume of the mixture [meter³];
 - `RT`: thermal energy, `CubicEoS.GAS_CONSTANT_SI * temperature`, [Joule / mole];
-- `StateVariables::Type{<:AbstractVTStabilityState}`: variables used in minimization.
+- `StateVariables::Type{<:AbstractVTStabilityState}`: variables used in minimization,
+    default is `VTStabilityPhysicalState`.
 
 # Optional arguments
 
@@ -88,6 +90,10 @@ function vt_stability(mixture, nmol, volume, RT, ::Type{StateVariables};
     return issuccess, isstable, results
 end
 
+# Default variables
+vt_stability(mixture, nmol, volume, RT; kwargs...) =
+    vt_stability(mixture, nmol, volume, RT, VTStabilityPhysicalState; kwargs...)
+
 function vt_stability!(
     trialstate::AbstractVTStabilityState,
     basestate::VTStabilityBaseState,
@@ -133,7 +139,7 @@ function vt_stability!(
     isstable = tpd_val ≥ -abs(tpd_thresh)
     testconc = concentration(trialstate)
 
-    return __dev_VTStabilityResult(isfinished, isstable, tpd_val, testconc, trialstate, optim)
+    return VTStabilityResult(isfinished, isstable, tpd_val, testconc, trialstate, optim)
 end
 
 struct OptimStats
@@ -142,7 +148,7 @@ struct OptimStats
     calls::Int
 end
 
-struct __dev_VTStabilityResult{T<:Real,S<:AbstractVTStabilityState}
+struct VTStabilityResult{T<:Real,S<:AbstractVTStabilityState}
     issuccess::Bool
     isstable::Bool
     energy_density::T

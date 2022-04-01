@@ -322,10 +322,8 @@ end
 
 
 "Return concentration of state with minimum energy from vt-stability tries."
-function __vt_flash_init_conc_choose(
-    vt_stab_tries::AbstractVector{VTStabilityResult{T}},
-) where {T}
-    Dmin = T(Inf)
+function __vt_flash_init_conc_choose(vt_stab_tries)
+    Dmin = Inf
     index_min = -1
     for (i, state) in enumerate(vt_stab_tries)
         if state.issuccess && !state.isstable && state.energy_density < Dmin
@@ -333,5 +331,6 @@ function __vt_flash_init_conc_choose(
             Dmin = state.energy_density
         end
     end
+    index_min == -1 && error("Stability tries are inconsistent: Can't choose the one with the lowest energy")
     return vt_stab_tries[index_min].concentration
 end

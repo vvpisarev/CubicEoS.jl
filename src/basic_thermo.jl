@@ -226,15 +226,23 @@ function compressibility(
     χ::AbstractVector,
     P,
     RT,
-    phase::AbstractChar='g';
+    phase::AbstractChar;
     buf = NamedTuple(),
 )
+    zroots = zfactors(mix, χ, P, RT; buf=buf)
+    return zfactorchoose(zroots, phase)
+end
 
-    phase in ('g', 'l') || throw(DomainError(repr(phase), "Phase must be 'g' or 'l'"))
-
-    ntotal = sum(χ)
-    am, bm, cm, dm = eos_parameters(mix, χ, RT; buf = buf)
-    prt = P / (RT * ntotal)
+function zfactors(
+    mix::BrusilovskyEoSMixture,
+    molfrac::AbstractVector,
+    pressure,
+    RT::Real;
+    buf = NamedTuple(),
+)
+    ntotal = sum(molfrac)
+    am, bm, cm, dm = eos_parameters(mix, molfrac, RT; buf=buf)
+    prt = pressure / (RT * ntotal)
     am *= prt / (RT * ntotal)
     bm *= prt
     cm *= prt
@@ -245,10 +253,16 @@ function compressibility(
         am - bm * cm + cm * dm - bm * dm - dm - cm,
         -bm * cm * dm - cm * dm - am * bm,
     )
+    return zroots
+end
 
+# TODO: Symbols instead of chars
+function zfactorchoose(factors, phase::AbstractChar)
     if phase == 'g'
-        return maximum(z for z in zroots if z > 0.0) # NaN is filtered
-    else # phase == 'l'
-        return minimum(z for z in zroots if z > 0.0)
+        return maximum((z) -> isnan(z) ? -Inf : z, factors)
+    elseif phase == 'l'
+        return minimum((z) -> isnan(z) ? Inf : z, factors)
+    else
+        throw(DomainError(repr(phase), "Phase must be 'g' or 'l'"))
     end
 end

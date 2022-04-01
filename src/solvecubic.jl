@@ -70,3 +70,22 @@ Base.@propagate_inbounds function solve_cubic!(roots_::AbstractVector, a, b, c, 
     @view(roots_[1:3]) .= solve_cubic(a, b, c, d)
     return roots_
 end
+
+function solve_quadratic(A, B, C)
+    a, b, c = promote(float.((A, B, C))...)
+    nan = zero(a) / zero(a)
+
+    iszero(a) && return (-c/b, nan)
+
+    b² = b * b
+    ac4 = 4 * a * c
+
+    if b² < ac4
+        return (nan, nan)
+    elseif b² == ac4
+        return (-b/(2*a), -b/(2*a))
+    else
+        sqrtD = sqrt(b² - ac4)
+        return ((-b - sqrtD)/(2*a), (-b + sqrtD)/(2*a))
+    end
+end

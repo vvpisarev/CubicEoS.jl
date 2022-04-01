@@ -98,7 +98,9 @@ end
     return mix.components[i]
 end
 
-struct BrusilovskyThermoBuffer{T}
+abstract type AbstractEoSThermoBuffer end
+
+struct BrusilovskyThermoBuffer{T} <: AbstractEoSThermoBuffer
     matr::Matrix{T}
     vec1::Vector{T}
     vec2::Vector{T}

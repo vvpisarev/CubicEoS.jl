@@ -107,9 +107,11 @@ function vt_stability!(
     buf::AbstractEoSThermoBuffer=thermo_buffer(basestate.mixture),
 )
     testhessian = let n = ncomponents(basestate.mixture)
-        Matrix{Float64}(undef, (n, n))
+        # Matrix{Float64}(undef, (n, n))
+        diagm(n, n, 0 => ones(n))
     end
-    testhessian = helmholtztpdhessian!(testhessian, trialstate, basestate; buf=buf)
+    # If used hessian is true hessian
+    # testhessian = helmholtztpdhessian!(testhessian, trialstate, basestate; buf=buf)
 
     teststatex = value(trialstate)
     Downhill.reset!(optmethod, teststatex, testhessian)

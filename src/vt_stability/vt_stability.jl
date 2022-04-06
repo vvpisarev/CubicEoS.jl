@@ -85,7 +85,8 @@ function vt_stability(mixture, nmol, volume, RT, ::Type{StateVariables};
     issuccess = any(x -> x.issuccess, results)
     !issuccess && error("VTStability: all tries have failed")
 
-    isstable = all(x -> x.isstable, results)
+    # Not successed results are ignored
+    isstable = all(x -> x.issuccess ? x.isstable : true, results)
 
     return issuccess, isstable, results
 end

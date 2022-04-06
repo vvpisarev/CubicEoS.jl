@@ -168,7 +168,9 @@ function __vt_stability_tpd_closures(
 
     function clsr_tpd_fdf!(x::AbstractVector, g::AbstractVector)
         trialx .= x
-        tpd, g = helmholtztpdwgradient!(g, trialstate, basestate; buf=buf)
+        # TODO: Avoid double calculation of gradient (`helmholtztpd` call)
+        g = helmholtztpdgradient!(g, trialstate, basestate; buf=buf)
+        tpd = helmholtztpd(trialstate, basestate; buf=buf)
         return tpd, g
     end
 

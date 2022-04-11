@@ -85,7 +85,8 @@ function vt_stability(mixture, nmol, volume, RT, ::Type{StateVariables};
     issuccess = any(x -> x.issuccess, results)
     !issuccess && error("VTStability: all tries have failed")
 
-    isstable = all(x -> x.isstable, results)
+    # Not successed results are ignored
+    isstable = all(x -> x.issuccess ? x.isstable : true, results)
 
     return issuccess, isstable, results
 end
@@ -106,9 +107,11 @@ function vt_stability!(
     buf::AbstractEoSThermoBuffer=thermo_buffer(basestate.mixture),
 )
     testhessian = let n = ncomponents(basestate.mixture)
-        Matrix{Float64}(undef, (n, n))
+        # Matrix{Float64}(undef, (n, n))
+        diagm(n, n, 0 => ones(n))
     end
-    testhessian = helmholtztpdhessian!(testhessian, trialstate, basestate; buf=buf)
+    # If used hessian is true hessian
+    # testhessian = helmholtztpdhessian!(testhessian, trialstate, basestate; buf=buf)
 
     teststatex = value(trialstate)
     Downhill.reset!(optmethod, teststatex, testhessian)
@@ -168,7 +171,9 @@ function __vt_stability_tpd_closures(
 
     function clsr_tpd_fdf!(x::AbstractVector, g::AbstractVector)
         trialx .= x
-        tpd, g = helmholtztpdwgradient!(g, trialstate, basestate; buf=buf)
+        # TODO: Avoid double calculation of gradient (`helmholtztpd` call)
+        g = helmholtztpdgradient!(g, trialstate, basestate; buf=buf)
+        tpd = helmholtztpd(trialstate, basestate; buf=buf)
         return tpd, g
     end
 

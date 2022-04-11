@@ -40,7 +40,7 @@ where μ'ᵢ is chemical potential of trial phase and μᵢ is chemical potentia
 - `volume::Real`: volume of the mixture [meter³];
 - `RT`: thermal energy, `CubicEoS.GAS_CONSTANT_SI * temperature`, [Joule / mole];
 - `StateVariables::Type{<:AbstractVTStabilityState}`: variables used in minimization,
-    default is `VTStabilityPhysicalState`.
+    default is `VTStabilityIdealIdentityState`.
 
 # Optional arguments
 
@@ -93,7 +93,7 @@ end
 
 # Default variables
 vt_stability(mixture, nmol, volume, RT; kwargs...) =
-    vt_stability(mixture, nmol, volume, RT, VTStabilityPhysicalState; kwargs...)
+    vt_stability(mixture, nmol, volume, RT, VTStabilityIdealIdentityState; kwargs...)
 
 function vt_stability!(
     trialstate::AbstractVTStabilityState,

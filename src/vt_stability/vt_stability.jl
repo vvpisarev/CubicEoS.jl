@@ -59,14 +59,19 @@ function vt_stability(mixture, nmol, volume, RT, ::Type{StateVariables};
     basestate = VTStabilityBaseState(mixture, nmol, volume, RT; buf=buf)
 
     # prepare TPD closures: TPD, gradient, constrain_step
-    tpd_fdf!, tpd_df! = __vt_stability_tpd_closures(StateVariables, basestate; buf=buf)
-    constrain_step = __vt_stability_step_closure(StateVariables, basestate.mixture.components.b)
+    tpd_fdf!, tpd_df! = __vt_stability_tpd_closures(StateVariables, basestate)#; buf=buf)
+
+    # IGNORING COVOLUMES
+    constrain_step = __vt_stability_step_closure(StateVariables, similar(basestate.logconcentration))
 
     # prepare stop criterion closure
-    convcond = __vt_stability_convergence_closure(StateVariables, basestate, tol; buf=buf)
+    convcond = __vt_stability_convergence_closure(StateVariables, basestate, tol)#; buf=buf)
 
     # prepare initial guesses
-    trial_concentrations = vt_stability_initials_satpressure(mixture, nmol, RT; buf=buf)
+    # INITITAL GUESS FROM A CUBIC EOS
+    trial_concentrations = let mixtureBrus = load(BrusilovskyEoSMixture; names=name.(components(mixture)))
+        vt_stability_initials_satpressure(mixtureBrus, nmol, RT)#; buf=buf)
+    end
 
     # run optimizer for each guess
     optmethod = Downhill.CholBFGS(basestate.logconcentration)

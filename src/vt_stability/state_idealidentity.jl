@@ -83,20 +83,23 @@ function __constrain_step(
         αlow = di > 0 ? max(αlow, -xi/di) : αlow
     end
 
-    # Size of trial phase
-    A = sum(d*d*b for (d, b) in zip(direction, covolumes))
-    B = 2 * sum(x*d*b for (x, d, b) in zip(trialx, direction, covolumes))
-    C = -4 + sum(x*x*b for (x, b) in zip(trialx, covolumes))
+    # NO COVOLUME CONSTRAINT FOR MBWREOS
+    # `covolumes` JUST IGNORED
 
-    A < 0 && throw(ConstrainStepError("parabolic condition wrong"))
-    αcov = solve_quadratic(A, B, C)
+    # # Size of trial phase
+    # A = sum(d*d*b for (d, b) in zip(direction, covolumes))
+    # B = 2 * sum(x*d*b for (x, d, b) in zip(trialx, direction, covolumes))
+    # C = -4 + sum(x*x*b for (x, b) in zip(trialx, covolumes))
 
-    # If there are one or zero roots, covolume inequality constraint has no solutions.
-    any(isnan, αcov) && throw(ConstrainStepError("covolume constraint can't be resolved"))
+    # A < 0 && throw(ConstrainStepError("parabolic condition wrong"))
+    # αcov = solve_quadratic(A, B, C)
 
-    αlocov, αhicov = extrema(αcov)
-    αlow = max(αlocov, αlow)
-    αmax = min(αhicov, αmax)
+    # # If there are one or zero roots, covolume inequality constraint has no solutions.
+    # any(isnan, αcov) && throw(ConstrainStepError("covolume constraint can't be resolved"))
+
+    # αlocov, αhicov = extrema(αcov)
+    # αlow = max(αlocov, αlow)
+    # αmax = min(αhicov, αmax)
 
     (αmax ≤ 0 || αmax ≤ αlow) && throw(ConstrainStepLowerBoundError(trialx, direction))
 

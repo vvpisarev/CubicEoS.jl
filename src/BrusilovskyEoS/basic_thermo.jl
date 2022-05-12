@@ -28,7 +28,7 @@ function a_coef(substance::BrusilovskyEoSComponent, RT::Real)
 end
 
 "Reference: Brusilovsky2002 [p 272, eq 5.4]"
-function wilson_saturation_pressure(x::BrusilovskyEoSComponent, RT::Real)
+function CubicEoS.wilson_saturation_pressure(x::BrusilovskyEoSComponent, RT::Real)
     return CubicEoS.wilson_saturation_pressure(x.Pc, x.RTc, x.acentric_factor, RT)
 end
 
@@ -57,7 +57,7 @@ function CubicEoS.zfactors(
     bm *= prt
     cm *= prt
     dm *= prt
-    zroots = solve_cubic(
+    zroots = CubicEoS.solve_cubic(
         1.0,
         cm + dm - bm - 1.0,
         am - bm * cm + cm * dm - bm * dm - dm - cm,

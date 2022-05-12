@@ -70,8 +70,8 @@ function vt_stability(mixture, nmol, volume, RT, ::Type{StateVariables};
 
     # prepare initial guesses
     # INITITAL GUESS FROM A CUBIC EOS
-    trial_concentrations = let mixtureBrus = load(BrusilovskyEoSMixture; names=name.(components(mixture)))
-        vt_stability_initials_satpressure(mixtureBrus, nmol, RT)#; buf=buf)
+    trial_concentrations = let mixtureBrus = load(BrusilovskyEoSMixture; names=map(name, components(mixture)))
+        vt_stability_initials_satpressure(mixtureBrus, nmol, RT)
     end
 
     # run optimizer for each guess

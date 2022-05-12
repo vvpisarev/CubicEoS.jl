@@ -18,7 +18,7 @@ end
     include("basic_thermo.jl")
     include("chempotential.jl")
     include("solvecubic.jl")
-    # include("vt_stability.jl")
+    include("vt_stability.jl")
     # include("vt_flash/nvt.jl")
     # include("vt_flash/state_idealidentity.jl")
     # include("vt_flash/newton.jl")

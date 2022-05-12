@@ -50,6 +50,7 @@ where μ'ᵢ is chemical potential of trial phase and μᵢ is chemical potentia
 - `buf::AbstractEoSThermoBuffer`: cache structure, reduces allocations, by default is `thermo_buffer(mixture)`.
 """
 function vt_stability(mixture, nmol, volume, RT, ::Type{StateVariables};
+    eos_constrain_step::Function=(StateVariables, x, d) -> (-Inf, Inf),
     tol::Real=1e-3,
     tpd_thresh=-1e-5,
     maxiter::Int=1000,
@@ -62,7 +63,7 @@ function vt_stability(mixture, nmol, volume, RT, ::Type{StateVariables};
     tpd_fdf!, tpd_df! = __vt_stability_tpd_closures(StateVariables, basestate)#; buf=buf)
 
     # IGNORING COVOLUMES
-    constrain_step = __vt_stability_step_closure(StateVariables, similar(basestate.logconcentration))
+    constrain_step = __vt_stability_step_closure(StateVariables, eos_constrain_step)
 
     # prepare stop criterion closure
     convcond = __vt_stability_convergence_closure(StateVariables, basestate, tol)#; buf=buf)
@@ -191,12 +192,21 @@ function __vt_stability_tpd_closures(
     return clsr_tpd_fdf!, clsr_tpd_df!
 end
 
+"Creates closure-constraint for optimization."
 function __vt_stability_step_closure(
     ::Type{StateVariables},
-    covolumes::AbstractVector,
+    eos_constrain_step::Function,
 ) where {StateVariables<:AbstractVTStabilityState}
     function clsr(x::AbstractVector, direction::AbstractVector)
-        return __constrain_step(StateVariables, x, direction, covolumes)
+        αlowphys, αmaxphys = physical_constrain_step(StateVariables, x, direction)
+        αloweos, αmaxeos = eos_constrain_step(StateVariables, x, direction)
+
+        αlow = max(αlowphys, αloweos)
+        αmax = min(αmaxphys, αmaxeos)
+
+        (αmax ≤ 0 || αmax ≤ αlow) && throw(ConstrainStepLowerBoundError(x, direction))
+
+        return αmax
     end
     return clsr
 end

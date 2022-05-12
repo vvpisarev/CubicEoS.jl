@@ -2,8 +2,6 @@ abstract type AbstractEoSComponent end
 
 abstract type AbstractEoSMixture end
 
-const NothingOrT{T} = Union{Nothing,T}
-
 struct BrusilovskyEoSComponent{T<:Number} <: AbstractEoSComponent
     # meta information
     name::String
@@ -87,13 +85,6 @@ function BrusilovskyEoSMixture(;
     kw...
 )
     return BrusilovskyEoSMixture(StructArray(components), constant, linear, quadratic)
-end
-
-@inline Base.@propagate_inbounds function Base.getindex(
-    mix::BrusilovskyEoSMixture,
-    i::Integer
-)
-    return mix.components[i]
 end
 
 abstract type AbstractEoSThermoBuffer end

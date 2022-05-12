@@ -1,5 +1,3 @@
-using StructArrays
-
 abstract type AbstractEoSComponent end
 
 abstract type AbstractEoSMixture end

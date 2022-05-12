@@ -10,6 +10,7 @@ export vt_flash, vt_flash_newton
 export converged
 
 using Downhill
+using StructArrays
 
 include("constants.jl")
 include("types.jl")

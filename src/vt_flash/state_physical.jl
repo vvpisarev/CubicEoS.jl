@@ -4,13 +4,13 @@ Flash based on physical variables: moles [mol] and volume [m³] of a phase.
 state = [N'₁, ..., N'ₙ, V']
 =#
 
-struct PhysicalState{V<:AbstractVector} <: AbstractVTFlashState
+struct VTFlashPhysicalState{V<:AbstractVector} <: AbstractVTFlashState
     x::V
 end
 
-nmolvol(s::PhysicalState, nmolb::AbstractVector, volumeb::Real) = (s.x[1:end-1], s.x[end])
+nmolvol(s::VTFlashPhysicalState, nmolb::AbstractVector, volumeb::Real) = (s.x[1:end-1], s.x[end])
 
-function PhysicalState{V}(
+function VTFlashPhysicalState{V}(
     concentration::AbstractVector,
     saturation::Real,
     nmolb::AbstractVector,
@@ -20,19 +20,19 @@ function PhysicalState{V}(
     volume1 = saturation * volumeb
     @. x[1:end-1] = concentration * volume1
     x[end] = volume1
-    return PhysicalState{V}(x)
+    return VTFlashPhysicalState{V}(x)
 end
 
-@inline PhysicalState(c, s, n, v) = PhysicalState{Vector{Float64}}(c, s, n, v)
+@inline VTFlashPhysicalState(c, s, n, v) = VTFlashPhysicalState{Vector{Float64}}(c, s, n, v)
 
 function gradient!(
     grad::AbstractVector,
-    state::PhysicalState,
+    state::VTFlashPhysicalState,
     mix,
     nmolb,
     volumeb,
     RT;
-    buf::BrusilovskyThermoBuffer=thermo_buffer(mix),
+    buf::AbstractEoSThermoBuffer=thermo_buffer(mix),
 )
     nmol1 = @view state.x[1:end-1]
     volume1 = state.x[end]
@@ -52,12 +52,12 @@ end
 
 function hessian!(
     hess::AbstractMatrix,
-    state::PhysicalState,
+    state::VTFlashPhysicalState,
     mix,
     nmolb,
     volumeb,
     RT;
-    buf::BrusilovskyThermoBuffer=thermo_buffer(mix),
+    buf::AbstractEoSThermoBuffer=thermo_buffer(mix),
 )
     nmol1 = @view state.x[1:end-1]
     volume1 = state.x[end]
@@ -74,8 +74,10 @@ function hessian!(
     return hess
 end
 
+# TODO: separate constraints logic: physical and eos
+# TODO: move eos-related code to BrusilovskyEoS
 function __vt_flash_optim_closures(
-    state1::PhysicalState,
+    state1::VTFlashPhysicalState,
     mix::BrusilovskyEoSMixture,
     nmolb::AbstractVector,
     volumeb::Real,
@@ -84,10 +86,10 @@ function __vt_flash_optim_closures(
     thermo_buf = thermo_buffer(mix)
     state1x = value(state1)
 
-    state2 = PhysicalState(similar(state1x))
+    state2 = VTFlashPhysicalState(similar(state1x))
     state2x = value(state2)
 
-    stateb = PhysicalState(similar(state1x))
+    stateb = VTFlashPhysicalState(similar(state1x))
     statebx = value(stateb)
     statebx .= [nmolb; volumeb]
     gradb = similar(state1x)

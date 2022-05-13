@@ -1,5 +1,5 @@
 #=
-    IdealIdentityState
+    VTFlashIdealIdentityState
 
 Variables that make ideal part of hessian over moles to identity matrix.
 
@@ -8,11 +8,11 @@ state = [ 2 √Nᵢ arcsin(√N'ᵢ / √Nᵢ); √N V'/V ], where N = Σᵢ N�
                     α'ᵢ               α'V
 =#
 
-struct IdealIdentityState{V<:AbstractVector} <: AbstractVTFlashState
+struct VTFlashIdealIdentityState{V<:AbstractVector} <: AbstractVTFlashState
     x::V
 end
 
-function nmolvol(s::IdealIdentityState, nmolb::V, volumeb::T) where {V, T}
+function nmolvol(s::VTFlashIdealIdentityState, nmolb::V, volumeb::T) where {V, T}
     x = value(s)
     αnmol = @view x[1:end-1]
     αvol = x[end]
@@ -23,7 +23,7 @@ function nmolvol(s::IdealIdentityState, nmolb::V, volumeb::T) where {V, T}
     return (nmol, volume)
 end
 
-function IdealIdentityState{V}(
+function VTFlashIdealIdentityState{V}(
     concentration::AbstractVector,
     saturation::Real,
     nmolb::AbstractVector,
@@ -37,19 +37,19 @@ function IdealIdentityState{V}(
     @. x[1:end-1] = 2 * sqrt(nmolb) * asin(sqrt(nmol/nmolb))
     x[end] = sqrt(sum(nmolb)) * saturation
 
-    return IdealIdentityState{V}(x)
+    return VTFlashIdealIdentityState{V}(x)
 end
 
-@inline IdealIdentityState(c, s, n, v) = IdealIdentityState{Vector{Float64}}(c, s, n, v)
+@inline VTFlashIdealIdentityState(c, s, n, v) = VTFlashIdealIdentityState{Vector{Float64}}(c, s, n, v)
 
 function gradient!(
     grad::AbstractVector,
-    state::IdealIdentityState,
-    mix::BrusilovskyEoSMixture,
+    state::VTFlashIdealIdentityState,
+    mix::AbstractEoSMixture,
     nmolb::AbstractVector,
     volumeb::Real,
     RT::Real;
-    buf::BrusilovskyThermoBuffer=thermo_buffer(mix),
+    buf::AbstractEoSThermoBuffer=thermo_buffer(mix),
 )
     nmol1, vol1 = nmolvol(state, nmolb, volumeb)
     grad = nvtgradient!(grad, mix, nmol1, vol1, RT; buf=buf)
@@ -70,12 +70,12 @@ end
 
 function hessian!(
     hess::AbstractMatrix,
-    state::IdealIdentityState,
-    mix::BrusilovskyEoSMixture,
+    state::VTFlashIdealIdentityState,
+    mix::AbstractEoSMixture,
     nmolb::AbstractVector,
     volumeb::Real,
     RT::Real;
-    buf::BrusilovskyThermoBuffer=thermo_buffer(mix),
+    buf::AbstractEoSThermoBuffer=thermo_buffer(mix),
 )
     # Here is version that scales nvt-hessian
     # but a direct calculation may be considerd
@@ -113,7 +113,7 @@ function hessian!(
 end
 
 function __vt_flash_optim_closures(
-    state1::IdealIdentityState,
+    state1::VTFlashIdealIdentityState,
     mix::BrusilovskyEoSMixture,
     nmolb::AbstractVector,
     volumeb::Real,

@@ -6,18 +6,18 @@ state = [ ---, ..., ---, --- ]
         [  N1        Nn   V  ]
 =#
 
-struct RatioState{V<:AbstractVector} <: AbstractVTFlashState
+struct VTFlashRatioState{V<:AbstractVector} <: AbstractVTFlashState
     x::V
 end
 
-function nmolvol(s::RatioState, nmolb::V, volumeb::T) where {V, T}
+function nmolvol(s::VTFlashRatioState, nmolb::V, volumeb::T) where {V, T}
     x = value(s)
     nmol1 = nmolb .* x[1:end-1]
     volume1 = volumeb * x[end]
     return (nmol1, volume1)
 end
 
-function RatioState{V}(
+function VTFlashRatioState{V}(
     concentration::AbstractVector,
     saturation::Real,
     nmolb::AbstractVector,
@@ -26,19 +26,19 @@ function RatioState{V}(
     x = similar(nmolb, Float64, length(nmolb) + 1)
     @. x[1:end-1] = volumeb * saturation * concentration / nmolb
     x[end] = saturation
-    return RatioState{V}(x)
+    return VTFlashRatioState{V}(x)
 end
 
-@inline RatioState(c, s, n, v) = RatioState{Vector{Float64}}(c, s, n, v)
+@inline VTFlashRatioState(c, s, n, v) = VTFlashRatioState{Vector{Float64}}(c, s, n, v)
 
 function gradient!(
     grad::AbstractVector,
-    state::RatioState,
-    mix::BrusilovskyEoSMixture,
+    state::VTFlashRatioState,
+    mix::AbstractEoSMixture,
     nmolb::AbstractVector,
     volumeb::Real,
     RT::Real;
-    buf::BrusilovskyThermoBuffer=thermo_buffer(mix),
+    buf::AbstractEoSThermoBuffer=thermo_buffer(mix),
 )
     nmol1, vol1 = nmolvol(state, nmolb, volumeb)
     grad = nvtgradient!(grad, mix, nmol1, vol1, RT; buf=buf)
@@ -57,12 +57,12 @@ end
 
 function hessian!(
     hess::AbstractMatrix,
-    state::RatioState,
-    mix::BrusilovskyEoSMixture,
+    state::VTFlashRatioState,
+    mix::AbstractEoSMixture,
     nmolb::AbstractVector,
     volumeb::Real,
     RT::Real;
-    buf::BrusilovskyThermoBuffer=thermo_buffer(mix),
+    buf::AbstractEoSThermoBuffer=thermo_buffer(mix),
 )
     nmol1, vol1 = nmolvol(state, nmolb, volumeb)
     hess = nvthessian!(hess, mix, nmol1, vol1, RT; buf=buf)
@@ -82,7 +82,7 @@ function hessian!(
 end
 
 function __vt_flash_optim_closures(
-    state1::RatioState,
+    state1::VTFlashRatioState,
     mix::BrusilovskyEoSMixture,
     nmolb::AbstractVector,
     volumeb::Real,

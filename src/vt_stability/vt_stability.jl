@@ -6,7 +6,7 @@ include("state_idealidentity.jl")
 
 
 """
-    vt_stability(mixture, nmol, volume, RT[, StateVariables; tol=1e-3, tpd_thresh=-1e-5, maxiter=200, buf])
+    vt_stability(mixture, nmol, volume, RT[, StateVariables; trial_concentrations, eos_constrain_step, tol=1e-3, tpd_thresh=-1e-5, maxiter=200, buf])
 
 Checks thermodynamical stability of single-phase state for `mixture` with composition `nmol`,
 occupying `volume` at thermal energy `RT`.
@@ -15,9 +15,9 @@ from each of initial guess.
 
 See also [`vt_stability!`](@ref).
 
-*Optimizer.* BFGS with modified Cholesky decomposition (see `Downhill.CholBFGS`).
-
-*Initialization.* Four guesses for the argument (Mikyska and Firoozabadi, Fluid Ph. Equil., 2012, 10.1016/j.fluid.2012.01.026).
+*Initialization.* Stability runs from a set of initial guesses provided by `trial_concentrations`.
+By default, four guesses is used based on cubic eos and ideal mixing rules
+(Mikyska and Firoozabadi, Fluid Ph. Equil., 2012, 10.1016/j.fluid.2012.01.026).
 Initial Hessian is put to the optimizer.
 
 *`StateVariables.`* Available are
@@ -33,6 +33,22 @@ Initial Hessian is put to the optimizer.
 ```
 where μ'ᵢ is chemical potential of trial phase and μᵢ is chemical potential of base (bulk) phase.
 
+*Optimizer.* BFGS with modified Cholesky decomposition (see `Downhill.CholBFGS`).
+
+*Optimization constraints.* There are two sets of constraints: physical and EoS-based.
+Physical constraints are
+
+```
+  c'ᵢ > 0 for each component
+```
+
+and served by `CubicEoS` (see [`CubicEoS.physical_constrain_step`](@ref) for example).
+
+EoS-based constraints are provided by user through `eos_constrain_step`.
+For example, see [`CubicEoS.BrusilovskyEoS.eos_constrain_step`](@ref) which defines
+"size of phase" constraints.
+By default, there is no eos-related constraint.
+
 # Required arguments
 
 - `mixture`: a mixture described by an equation of state;
@@ -44,13 +60,32 @@ where μ'ᵢ is chemical potential of trial phase and μᵢ is chemical potentia
 
 # Optional arguments
 
+- `trial_concentrations=nothing`: iterable of vectors of trial (initial) concentrations, by default four guesses from cubic eos is used (see 10.1016/j.fluid.2012.01.026);
+- `eos_constrain_step::Function=(StateVariables, x, d) -> (-Inf, Inf)`: bounds for step magnitude `(αlow, αmax)` in optimization point `x` and direction `d` in variables `StateVariables` (`xnew = x + α*d`);
 - `tol::Real=1e-3`: controls convergence criterion (see above);
 - `tpd_thresh::Real=-1e-5`: negative TPD value, below which state is considered unstable, formally [moles];
-- `maxiter::Int=200`: maximum number of iterations allowed per minimization;
+- `maxiter::Int=1000`: maximum number of iterations allowed per minimization;
 - `buf::AbstractEoSThermoBuffer`: cache structure, reduces allocations, by default is `thermo_buffer(mixture)`.
+
+# Examples
+
+Stability of methane (60%) + n-pentane (40%) at 300K and overall concentration 5000 mole / meter³
+
+```julia
+c1c5 = CubicEoS.load(BrusilovskyEoSMixture; names=("methane", "n-pentane"))
+volume = 1e-6
+RT = CubicEoS.GAS_CONSTANT_SI * 300
+nmol = [0.6, 0.4] * 5000 * volume
+vars = CubicEoS.VTStabilityIdealIdentityState
+
+vt_stability(c1c5, nmol, volume, RT, vars;
+    eos_constrain_step=CubicEoS.BrusilovskyEoS.eos_constrain_step(vars, c1c5),
+)
+```
 """
 function vt_stability(mixture, nmol, volume, RT, ::Type{StateVariables};
     eos_constrain_step::Function=(StateVariables, x, d) -> (-Inf, Inf),
+    trial_concentrations=nothing,
     tol::Real=1e-3,
     tpd_thresh=-1e-5,
     maxiter::Int=1000,
@@ -60,18 +95,20 @@ function vt_stability(mixture, nmol, volume, RT, ::Type{StateVariables};
     basestate = VTStabilityBaseState(mixture, nmol, volume, RT; buf=buf)
 
     # prepare TPD closures: TPD, gradient, constrain_step
-    tpd_fdf!, tpd_df! = __vt_stability_tpd_closures(StateVariables, basestate)#; buf=buf)
+    tpd_fdf!, tpd_df! = __vt_stability_tpd_closures(StateVariables, basestate)
 
     # IGNORING COVOLUMES
     constrain_step = __vt_stability_step_closure(StateVariables, eos_constrain_step)
 
     # prepare stop criterion closure
-    convcond = __vt_stability_convergence_closure(StateVariables, basestate, tol)#; buf=buf)
+    convcond = __vt_stability_convergence_closure(StateVariables, basestate, tol)
 
-    # prepare initial guesses
+    # prepare initial guesses, if not provided
     # INITITAL GUESS FROM A CUBIC EOS
-    trial_concentrations = let mixtureBrus = load(BrusilovskyEoSMixture; names=map(name, components(mixture)))
-        vt_stability_initials_satpressure(mixtureBrus, nmol, RT)
+    if isnothing(trial_concentrations)
+        trial_concentrations = let mixtureBrus = load(BrusilovskyEoSMixture; names=map(name, components(mixture)))
+            vt_stability_initials_satpressure(mixtureBrus, nmol, RT)
+        end
     end
 
     # run optimizer for each guess

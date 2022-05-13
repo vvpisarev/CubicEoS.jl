@@ -19,4 +19,5 @@ module BrusilovskyEoS
     include("basic_thermo.jl")
     include("chempotential.jl")
     include("vt_stability.jl")
+    include("vt_flash.jl")
 end

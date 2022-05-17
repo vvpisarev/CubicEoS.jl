@@ -39,3 +39,46 @@ function CubicEoS.vtpressuregradient!(
     ∇P[end] = - RT * ΣnmolbyVmB² + AbyDmC * (VpC⁻² - VpD⁻²)
     return ∇P
 end
+
+# General-purpose eos-constraint based on bisection and moles-volume variables.
+function eos_vt_split_constrain_step(
+    StateVariables::Type{<:CubicEoS.AbstractVTFlashState},
+    mix::BrusilovskyEoSMixture{T},
+    nmolbase::AbstractVector,
+    volumebase::Real,
+) where {T}
+    maxiter = 50
+
+    xtrial = Vector{T}(undef, ncomponents(mix) + 1)
+    covolumes = mix.components.b
+    nmol2 = similar(nmolbase, T)
+    nmoltrial = similar(nmolbase, T)
+
+    function iscovmeet(nmol1, volume1)
+        @. nmol2 = nmolbase - nmol1
+        volume2 = volumebase - volume1
+
+        cov1 = dot(nmol1, covolumes) ≤ volume1
+        cov2 = dot(nmol2, covolumes) ≤ volume2
+        return cov1 && cov2
+    end
+
+    function clsr(
+        StateVariables::Type{<:CubicEoS.AbstractVTFlashState},
+        x,
+        direction,
+    )
+        αlow = zero(T)
+        αmax = 1e3
+
+        for _ in 1:maxiter
+            @. xtrial = x + αmax * direction
+            # If `_` is replaced with `nmoltrial`, type inference crashes
+            _, volumetrial = CubicEoS.nmolvol!(nmoltrial, StateVariables(xtrial), nmolbase, volumebase)
+            iscovmeet(nmoltrial, volumetrial) && break
+            αmax *= 0.5
+        end
+        return αlow, αmax
+    end
+    return clsr
+end

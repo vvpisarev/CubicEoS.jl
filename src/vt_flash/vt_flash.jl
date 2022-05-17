@@ -1,5 +1,6 @@
 include("types.jl")
 include("nvt.jl")
+include("state_abstract.jl")
 # include("state_physical.jl")
 # include("state_ratio.jl")
 include("state_idealidentity.jl")

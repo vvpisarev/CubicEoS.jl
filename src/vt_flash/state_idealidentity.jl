@@ -7,11 +7,18 @@ Variables that make ideal part of Hessian over moles to identity matrix.
 **Definition**
 
 ```
-state = [ 2 √Nᵢ arcsin(√N'ᵢ / √Nᵢ); √N V'/V ]
-         |-----------------------| |-------|
-                    α'ᵢ               α'V
+x = [ 2 √Nᵢ arcsin(√N'ᵢ / √Nᵢ); √N V'/V ]
+     |-----------------------| |-------|
+                α'ᵢ               α'V
 ```
-where superscript `'` relates to a trial phase and `N = Σᵢ Nᵢ` is total moles.
+
+where
+
+- `N'ᵢ` and `V'`  are moles and volume of `'`-phase, respectively;
+- `Nᵢ` and `V` are moles and volume of mixture (`nmolbase`, `volumebase`), respectively;
+- `N = Σᵢ Nᵢ` is total moles.
+
+See also [`CubicEoS.AbstractVTFlashState`](@ref).
 """
 struct VTFlashIdealIdentityState{V<:AbstractVector} <: AbstractVTFlashState
     x::V
@@ -117,35 +124,12 @@ function hessian!(
     return hess
 end
 
-function physical_constrain_step_closure(
+@inline function physical_constrain_step_uplims(
     ::Type{<:VTFlashIdealIdentityState},
     nmolbase::AbstractVector,
     volumebase::Real=NaN,  # ignored
 )
-    # Upper limits for variables
-    xuplims = [π * sqrt.(nmolbase); sqrt(sum(nmolbase))]
-
-    function clsr(
-        ::Type{<:VTFlashIdealIdentityState},
-        x::AbstractVector,
-        direction::AbstractVector,
-    )
-        αmax = Inf
-        for (i, (xi, di, ui)) in enumerate(zip(x, direction, xuplims))
-            if iszero(di) && !(0 < xi < ui)
-                throw(ConstrainStepZeroDirectionError(i, xi))
-            end
-            αmax = di < 0 ? min(αmax, -xi/di) : min(αmax, (ui - xi)/di)
-        end
-
-        αlow = -Inf
-        for (xi, di, ui) in zip(x, direction, xuplims)
-            # Zero direction is checked above
-            αlow = di > 0 ? max(αlow, -xi/di) : max(αlow, (ui - xi)/di)
-        end
-        return αlow, αmax
-    end
-    return clsr
+    return [π * sqrt.(nmolbase); sqrt(sum(nmolbase))]
 end
 
 # TODO: deprecate, but it stores linear approximation for cubic eos constraint

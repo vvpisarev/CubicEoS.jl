@@ -1,20 +1,32 @@
-#=
-Flash based on fractional (ratio) variables
+"""
+    VTFlashRatioState(x)
+    VTFlashRatioState(concentration, saturation, nmolbase, volumebase)
 
-        [ N'1       N'n   V' ]
-state = [ ---, ..., ---, --- ]
-        [  N1        Nn   V  ]
-=#
+Fractional (ratio) variables for flash.
+Moles and volume of '-phase variables (a.k.a physical).
 
+**Definition**
+
+```
+x = [N'₁/N₁, ..., N'ₙ/Nₙ, V'/V]
+```
+
+where
+
+- `N'ᵢ` and `V'`  are moles and volume of `'`-phase, respectively;
+- `Nᵢ` and `V` are moles and volume of mixture (`nmolbase`, `volumebase`), respectively.
+
+See also [`CubicEoS.AbstractVTFlashState`](@ref).
+"""
 struct VTFlashRatioState{V<:AbstractVector} <: AbstractVTFlashState
     x::V
 end
 
-function nmolvol(s::VTFlashRatioState, nmolb::V, volumeb::T) where {V, T}
+function nmolvol!(nmol, s::VTFlashRatioState, nmolbase, volumebase)
     x = value(s)
-    nmol1 = nmolb .* x[1:end-1]
-    volume1 = volumeb * x[end]
-    return (nmol1, volume1)
+    @. nmol = nmolbase .* x[1:end-1]
+    volume = volumebase * x[end]
+    return nmol, volume
 end
 
 function VTFlashRatioState{V}(
@@ -81,84 +93,10 @@ function hessian!(
     return hess
 end
 
-function __vt_flash_optim_closures(
-    state1::VTFlashRatioState,
-    mix::BrusilovskyEoSMixture,
-    nmolb::AbstractVector,
-    volumeb::Real,
-    RT::Real,
+@inline function physical_constrain_step_uplims(
+    ::Type{<:VTFlashRatioState},
+    nmolbase::AbstractVector,
+    volumebase::Real=NaN,
 )
-    state1x = value(state1)
-    buf = thermo_buffer(mix)
-
-    helmb = helmholtz(mix, nmolb, volumeb, RT; buf=buf)
-
-    nmol2 = similar(nmolb, Float64)
-
-    covolumes = [nmolb .* components(mix).b; -volumeb]
-
-    function clsr_constrain_step(x::AbstractVector, dir::AbstractVector)
-        state1x .= x
-        α = Inf
-
-        # Finding upper limit
-        ## non-negativness: 0 < xi + α di < 1
-        for (i, (xi, di)) in enumerate(zip(state1x, dir))
-            if iszero(di) && !(0 < xi < 1)
-                throw(ConstrainStepZeroDirectionError(i, xi))
-            end
-            α = di < 0 ? min(α, -xi/di) : min(α, (1 - xi)/di)
-        end
-
-        ## covolumes
-        state1xdotcov = dot(state1x, covolumes)
-        dirdotcov = dot(dir, covolumes)
-        if dirdotcov > 0
-            α = min(α, -state1xdotcov/dirdotcov)
-        elseif dirdotcov < 0
-            α = min(α, (sum(covolumes) - state1xdotcov)/dirdotcov)
-        end
-
-        # Finding lower limit
-        ## Non-negativness
-        αlo = -Inf
-        for (xi, di) in zip(state1x, dir)
-            αlo = !iszero(di) && di > 0 ? max(αlo, -xi/di) : max(αlo, (1-xi)/di)
-        end
-
-        ## covolumes
-        if dirdotcov < 0
-            αlo = max(αlo, -state1xdotcov/dirdotcov)
-        elseif dirdotcov > 0
-            αlo = max(αlo, (sum(covolumes)-state1xdotcov)/dirdotcov)
-        end
-
-        α ≤ αlo && throw(ConstrainStepLowerBoundError(x, dir))
-
-        return α
-    end
-
-    function clsr_gradient!(grad::AbstractVector, x::AbstractVector)
-        state1x .= x
-        grad = gradient!(grad, state1, mix, nmolb, volumeb, RT; buf=buf)
-        return grad
-    end
-
-    function clsr_helmdiff!(x::AbstractVector, grad::AbstractVector)
-        state1x .= x
-
-        nmol1, vol1 = nmolvol(state1, nmolb, volumeb)
-        a1 = helmholtz(mix, nmol1, vol1, RT; buf=buf)
-
-        @. nmol2 = nmolb - nmol1
-        vol2 = volumeb - vol1
-        a2 = helmholtz(mix, nmol2, vol2, RT; buf=buf)
-
-        Δa = (a1 + a2) - helmb
-        grad = gradient!(grad, state1, mix, nmolb, volumeb, RT; buf=buf)
-
-        return Δa, grad
-    end
-
-    return clsr_constrain_step, clsr_gradient!, clsr_helmdiff!
+    return ones(size(nmolbase, 1) + 1)
 end

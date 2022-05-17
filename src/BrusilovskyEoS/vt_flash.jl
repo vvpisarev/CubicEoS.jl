@@ -40,7 +40,7 @@ function CubicEoS.vtpressuregradient!(
     return ∇P
 end
 
-# General-purpose eos-constraint based on bisection and moles-volume variables.
+# General-purpose covolume constraint based on bisection and moles-volume variables.
 function eos_vt_split_constrain_step(
     StateVariables::Type{<:CubicEoS.AbstractVTFlashState},
     mix::BrusilovskyEoSMixture{T},
@@ -81,4 +81,56 @@ function eos_vt_split_constrain_step(
         return αlow, αmax
     end
     return clsr
+end
+
+# Effective implementation of covolume constraint for physical variables.
+function eos_vt_split_constrain_step(
+    StateVariables::Type{<:CubicEoS.VTFlashPhysicalState},
+    mix::BrusilovskyEoSMixture,
+    nmolbase::AbstractVector,
+    volumebase::Real,
+)
+    covolumes = [mix.components.b; -1.0]
+    basedotcov = dot([nmolbase; volumebase], covolumes)
+
+    function clsr(
+        StateVariables::Type{<:CubicEoS.VTFlashPhysicalState},
+        x,
+        direction,
+    )
+        xdotcov = dot(x, covolumes)
+        dirdotcov = dot(direction, covolumes)
+
+        αmax = dirdotcov > 0 ? - xdotcov / dirdotcov : (basedotcov - xdotcov) / dirdotcov
+        αlow = dirdotcov < 0 ? - xdotcov / dirdotcov : (basedotcov - xdotcov) / dirdotcov
+
+        return αlow, αmax
+    end
+end
+
+# Effective implementation of covolume constraint for ratio variables.
+# TODO: DRY: Seems very similar to implememntation for physical variables,
+# TODO: DRY: only captured variables differ.
+function eos_vt_split_constrain_step(
+    StateVariables::Type{<:CubicEoS.VTFlashRatioState},
+    mix::BrusilovskyEoSMixture,
+    nmolbase::AbstractVector,
+    volumebase::Real,
+)
+    covolumes = [nmolbase .* mix.components.b; -volumebase]
+    basedotcov = sum(covolumes)
+
+    function clsr(
+        StateVariables::Type{<:CubicEoS.VTFlashRatioState},
+        x,
+        direction,
+    )
+        xdotcov = dot(x, covolumes)
+        dirdotcov = dot(direction, covolumes)
+
+        αmax = dirdotcov > 0 ? - xdotcov / dirdotcov : (basedotcov - xdotcov) / dirdotcov
+        αlow = dirdotcov < 0 ? - xdotcov / dirdotcov : (basedotcov - xdotcov) / dirdotcov
+
+        return αlow, αmax
+    end
 end

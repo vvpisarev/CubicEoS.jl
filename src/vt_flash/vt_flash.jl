@@ -1,8 +1,8 @@
 include("types.jl")
 include("nvt.jl")
 include("state_abstract.jl")
-# include("state_physical.jl")
-# include("state_ratio.jl")
+include("state_physical.jl")
+include("state_ratio.jl")
 include("state_idealidentity.jl")
 # include("newton.jl")
 
@@ -131,8 +131,7 @@ function vt_split!(
     constrain_step = let
         physical_constrain_step = physical_constrain_step_closure(
             StateVariables,
-            nmol,
-            volume,
+            physical_constrain_step_uplims(StateVariables, nmol, volume),
         )
         __vt_split_step_closure(
             StateVariables,

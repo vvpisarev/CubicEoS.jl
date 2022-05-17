@@ -38,3 +38,34 @@ function nmolvol(s::AbstractVTFlashState, nmolb::V, volumeb::T) where {V, T}
     nmol = similar(nmolb, Float64)  # FIXME: type inference
     return nmolvol!(nmol, s, nmolb, volumeb)
 end
+
+"Vector of upper limits for physical constraint for given state variables."
+physical_constrain_step_uplims(::Type{<:AbstractVTFlashState}, nmolbase, volumebase) = error("NotImplemented")
+
+# Creates closure of physical constrains `0 < x + α d < xuplims`.
+function physical_constrain_step_closure(
+    ::Type{<:AbstractVTFlashState},
+    xuplims::AbstractVector,
+)
+    function clsr(
+        ::Type{<:AbstractVTFlashState},
+        x::AbstractVector,
+        direction::AbstractVector,
+    )
+        αmax = Inf
+        for (i, (xi, di, ui)) in enumerate(zip(x, direction, xuplims))
+            if iszero(di) && !(0 < xi < ui)
+                throw(ConstrainStepZeroDirectionError(i, xi))
+            end
+            αmax = di < 0 ? min(αmax, -xi/di) : min(αmax, (ui - xi)/di)
+        end
+
+        αlow = -Inf
+        for (xi, di, ui) in zip(x, direction, xuplims)
+            # Zero direction is checked above
+            αlow = di > 0 ? max(αlow, -xi/di) : max(αlow, (ui - xi)/di)
+        end
+        return αlow, αmax
+    end
+    return clsr
+end

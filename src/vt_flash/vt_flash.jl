@@ -1,7 +1,7 @@
 include("types.jl")
 include("nvt.jl")
-include("state_physical.jl")
-include("state_ratio.jl")
+# include("state_physical.jl")
+# include("state_ratio.jl")
 include("state_idealidentity.jl")
 # include("newton.jl")
 
@@ -98,56 +98,127 @@ include("state_idealidentity.jl")
 #     )
 # end
 
-# """
-#     vt_flash!(unstable_state, mix, nmol, volume, RT; chemtol, presstol, maxiter)
+"""
+    vt_split!(unstable_state, mix, nmol, volume, RT; chemtol, presstol, maxiter)
 
-# Perform split phase of VT-flash from an `unstable_state::AbstractVTFlashState`,
-# which will be destructed.
+Perform split phase of VT-flash from an `unstable_state::AbstractVTFlashState`,
+which will be destructed.
 
-# For rest of arguments see [`vt_flash`](@ref).
+For rest of arguments see [`vt_flash`](@ref).
 
-# Return [`VTFlashResult`](@ref).
-# """
-# function vt_flash!(
-#     unstable_state::AbstractVTFlashState,
-#     mix::BrusilovskyEoSMixture,
-#     nmol::AbstractVector,
-#     volume::Real,
-#     RT::Real;
-#     chemtol::Real,
-#     presstol::Real,
-#     maxiter::Int,
-# )
-#     state = unstable_state
-#     statex = value(state)
+Return [`VTFlashResult`](@ref).
+"""
+function vt_split!(
+    unstable_state::StateVariables,
+    mix::AbstractEoSMixture,
+    nmol::AbstractVector,
+    volume::Real,
+    RT::Real;
+    chemtol::Real,
+    presstol::Real,
+    maxiter::Int,
+    eos_constrain_step::Function=(StateVariables, x, d) -> (-Inf, Inf),
+) where {StateVariables<:AbstractVTFlashState}
+    state = unstable_state
+    statex = value(state)
 
-#     # initial hessian
-#     hessian = Matrix{Float64}(undef, (size(statex, 1), size(statex, 1)))
-#     hessian = hessian!(hessian, state, mix, nmol, volume, RT)
+    # Initial hessian
+    hessian = Matrix{Float64}(undef, (size(statex, 1), size(statex, 1)))
+    hessian = hessian!(hessian, state, mix, nmol, volume, RT)
 
-#     constrain_step, helmgrad!, helmdiff! = __vt_flash_optim_closures(
-#         state, mix, nmol, volume, RT
-#     )
+    # Construction of step-closure from physical and eos constraints
+    constrain_step = let
+        physical_constrain_step = physical_constrain_step_closure(
+            StateVariables,
+            nmol,
+            volume,
+        )
+        __vt_split_step_closure(
+            StateVariables,
+            physical_constrain_step,
+            eos_constrain_step,
+        )
+    end
 
-#     convcond = __convergence_closure(state, mix, nmol, volume, RT;
-#         chemtol=chemtol,
-#         presstol=presstol,
-#     )
+    helmdiff! = __vt_split_helmdiff_closure(state, mix, nmol, volume, RT)
 
-#     # run optimize
-#     optmethod = Downhill.CholBFGS(statex)
-#     Downhill.reset!(optmethod, statex, hessian)
-#     optimresult = Downhill.optimize!(helmdiff!, optmethod, statex;
-#         gtol=NaN,
-#         convcond=convcond,
-#         maxiter=maxiter,
-#         constrain_step=constrain_step,
-#         reset=false,
-#     )
-#     statex .= optimresult.argument
+    convcond = __vt_split_convergence_closure(state, mix, nmol, volume, RT;
+        chemtol=chemtol,
+        presstol=presstol,
+    )
 
-#     return __vt_flash_two_phase_result(state, mix, nmol, volume, RT, optimresult)
-# end
+    # Run optimizer
+    optmethod = Downhill.CholBFGS(statex)
+    Downhill.reset!(optmethod, statex, hessian)
+    optimresult = Downhill.optimize!(helmdiff!, optmethod, statex;
+        gtol=NaN,
+        convcond=convcond,
+        maxiter=maxiter,
+        constrain_step=constrain_step,
+        reset=false,
+    )
+    statex .= optimresult.argument
+
+    return __vt_split_result(state, mix, nmol, volume, RT, optimresult)
+end
+
+"Creates closure of helmholtz energy for optimization."
+function __vt_split_helmdiff_closure(
+    state1::AbstractVTFlashState,
+    mix::AbstractEoSMixture,
+    nmolb::AbstractVector,  # base state
+    volumeb::Real,  # base state
+    RT::Real,
+)
+    state1x = value(state1)  # link to internal
+    buf = thermo_buffer(mix)
+
+    helmb = helmholtz(mix, nmolb, volumeb, RT; buf=buf)
+
+    nmol2 = similar(nmolb, Float64)
+
+    "Takes `x`, modifies gradient, `state` is kept fresh."
+    function clsr!(x::AbstractVector, grad::AbstractVector)
+        state1x .= x
+
+        nmol1, vol1 = nmolvol(state1, nmolb, volumeb)
+        a1 = helmholtz(mix, nmol1, vol1, RT; buf=buf)
+
+        @. nmol2 = nmolb - nmol1
+        vol2 = volumeb - vol1
+        a2 = helmholtz(mix, nmol2, vol2, RT; buf=buf)
+
+        Δa = (a1 + a2) - helmb
+        grad = gradient!(grad, state1, mix, nmolb, volumeb, RT; buf=buf)
+
+        return Δa, grad
+    end
+
+    return clsr!
+end
+
+# TODO: DRY: same code as for `__vt_stability_step_closure`
+function __vt_split_step_closure(
+    ::Type{StateVariables},
+    physical_constrain_step::Function,
+    eos_constrain_step::Function,
+) where {StateVariables<:AbstractVTFlashState}
+    function clsr(x::AbstractVector, direction::AbstractVector)
+        # Determine bounds from physical and eos constraints
+        # Merge the bounds
+        # Check for consistency of maximum step
+        αlowphys, αmaxphys = physical_constrain_step(StateVariables, x, direction)
+        αloweos, αmaxeos = eos_constrain_step(StateVariables, x, direction)
+
+        αlow = max(αlowphys, αloweos)
+        αmax = min(αmaxphys, αmaxeos)
+
+        (αmax ≤ 0 || αmax ≤ αlow) && throw(ConstrainStepLowerBoundError(x, direction))
+
+        return αmax
+    end
+    return clsr
+end
 
 # function __vt_flash_single_phase_result(
 #     state::S,
@@ -170,151 +241,153 @@ include("state_idealidentity.jl")
 #     )
 # end
 
-# function __find_saturation_negative_helmdiff(
-#     mix::BrusilovskyEoSMixture,
-#     nmolb::AbstractVector,
-#     volumeb::Real,
-#     RT::Real,
-#     concentration::AbstractVector;
-#     maxsaturation::Real,
-#     maxiter::Int,
-#     scale::Real,
-#     helmdifftol::Real,
-#     thermo_buf::BrusilovskyThermoBuffer=thermo_buffer(mix),
-# )
-#     # Δa = a' + a'' - abase
-#     abase = helmholtz(mix, nmolb, volumeb, RT; buf=thermo_buf)
+# TODO: check that saturation is valid for physical and eos constraints
+function __find_saturation_negative_helmdiff(
+    mix::AbstractEoSMixture,
+    nmolb::AbstractVector,
+    volumeb::Real,
+    RT::Real,
+    concentration::AbstractVector;
+    maxsaturation::Real,
+    maxiter::Int,
+    scale::Real,
+    helmdifftol::Real,
+    thermo_buf::AbstractEoSThermoBuffer=thermo_buffer(mix),
+)
+    # Δa = a' + a'' - abase
+    abase = helmholtz(mix, nmolb, volumeb, RT; buf=thermo_buf)
 
-#     nmol1 = similar(nmolb, Float64)
-#     nmol2 = similar(nmolb, Float64)
+    nmol1 = similar(nmolb, Float64)
+    nmol2 = similar(nmolb, Float64)
 
-#     function helmdiff(saturation::Real)
-#         volume1 = volumeb * saturation
-#         @. nmol1 = volume1 * concentration
-#         a1 = helmholtz(mix, nmol1, volume1, RT; buf=thermo_buf)
+    function helmdiff(saturation::Real)
+        volume1 = volumeb * saturation
+        @. nmol1 = volume1 * concentration
+        a1 = helmholtz(mix, nmol1, volume1, RT; buf=thermo_buf)
 
-#         volume2 = volumeb - volume1
-#         @. nmol2 = nmolb - nmol1
-#         a2 = helmholtz(mix, nmol2, volume2, RT; buf=thermo_buf)
-#         return (a1 + a2) - abase
-#     end
+        volume2 = volumeb - volume1
+        @. nmol2 = nmolb - nmol1
+        a2 = helmholtz(mix, nmol2, volume2, RT; buf=thermo_buf)
+        return (a1 + a2) - abase
+    end
 
-#     saturation = float(maxsaturation)
-#     for i in 1:maxiter
-#         try
-#             Δa = helmdiff(saturation)
-#             Δa < - abs(helmdifftol) && return saturation
-#         catch e
-#             isa(e, UndefVarError) && throw(e)  # syntax
-#         end
-#         saturation *= scale
-#     end
-#     return NaN
-# end
+    saturation = float(maxsaturation)
+    for i in 1:maxiter
+        try
+            Δa = helmdiff(saturation)
+            Δa < - abs(helmdifftol) && return saturation
+        catch e
+            isa(e, UndefVarError) && throw(e)  # Syntax
+            # Other exceptions include invalid saturations, so, ignored
+        end
+        saturation *= scale
+    end
+    return NaN
+end
 
-# function __convergence_closure(
-#     state1::AbstractVTFlashState,
-#     mix::BrusilovskyEoSMixture,
-#     nmolb::AbstractVector,
-#     volumeb::Real,
-#     RT::Real;
-#     chemtol::Real,
-#     presstol::Real,
-#     buf::BrusilovskyThermoBuffer=thermo_buffer(mix),
-# )
-#     state1x = value(state1)
+function __vt_split_convergence_closure(
+    state1::AbstractVTFlashState,
+    mix::AbstractEoSMixture{T},
+    nmolb::AbstractVector,
+    volumeb::Real,
+    RT::Real;
+    chemtol::Real,
+    presstol::Real,
+    buf::AbstractEoSThermoBuffer=thermo_buffer(mix),
+) where {T}
+    state1x = value(state1)
 
-#     g1 = Vector{Float64}(undef, ncomponents(mix) + 1)
-#     g2 = similar(g1)
-#     diff = similar(g1)
-#     nmol2 = similar(g1, Float64, ncomponents(mix))
+    g1 = Vector{T}(undef, ncomponents(mix) + 1)
+    g2 = similar(g1)
+    diff = similar(g1)
+    nmol2 = similar(g1, T, ncomponents(mix))
 
-#     function convcond(x::V, xpre::V, y::T, ypre::T, g::V) where {T<:Real,V<:AbstractVector}
-#         state1x .= x
-#         nmol1, vol1 = nmolvol(state1, nmolb, volumeb)
-#         g1 = CubicEoS.nvtgradient!(g1, mix, nmol1, vol1, RT; buf=buf)
+    function convcond(x::V, xpre::V, y::T1, ypre::T1, g::V) where {T1<:Real,V<:AbstractVector}
+        state1x .= x
+        nmol1, vol1 = nmolvol(state1, nmolb, volumeb)
+        g1 = nvtgradient!(g1, mix, nmol1, vol1, RT; buf=buf)
 
-#         @. nmol2 = nmolb - nmol1
-#         vol2 = volumeb - vol1
-#         g2 = CubicEoS.nvtgradient!(g2, mix, nmol2, vol2, RT; buf=buf)
+        @. nmol2 = nmolb - nmol1
+        vol2 = volumeb - vol1
+        g2 = nvtgradient!(g2, mix, nmol2, vol2, RT; buf=buf)
 
-#         #=
-#                    [μ₁' - μ₁'', ..., μₙ' - μₙ''; -P' + P'']ᵀ
-#             diff = ----------------------------------------
-#                                     RT
-#         =#
-#         @. diff = g1 - g2
+        #=
+                   [μ₁' - μ₁'', ..., μₙ' - μₙ''; -P' + P'']ᵀ
+            diff = ----------------------------------------
+                                    RT
+        =#
+        @. diff = g1 - g2
 
-#         condchem = let diffchem = (@view diff[1:end-1])
-#             # max_i |chem'_i - chem''_i| / RT < tolerance
-#             maximum(abs, diffchem) < chemtol
-#         end
-#         condpress = let diffpress = diff[end]
-#             # |P' - P''| V
-#             # ------------ < tolerance
-#             #    RT ΣNᵢ
-#             abs(diffpress) * volumeb / sum(nmolb) < presstol
-#         end
+        condchem = let diffchem = (@view diff[1:end-1])
+            # max_i |chem'_i - chem''_i| / RT < tolerance
+            maximum(abs, diffchem) < chemtol
+        end
+        condpress = let diffpress = diff[end]
+            # |P' - P''| V
+            # ------------ < tolerance
+            #    RT ΣNᵢ
+            abs(diffpress) * volumeb / sum(nmolb) < presstol
+        end
 
-#         return condchem && condpress
-#     end
+        return condchem && condpress
+    end
 
-#     return convcond
-# end
+    return convcond
+end
 
-# function __sort_phases!(mix, nmol₁, V₁, nmol₂, V₂, RT)
-#     P₁ = pressure(mix, nmol₁, V₁, RT)  # they should be equal
-#     P₂ = pressure(mix, nmol₂, V₂, RT)
+function __sort_phases!(mix, nmol₁, V₁, nmol₂, V₂, RT)
+    P₁ = pressure(mix, nmol₁, V₁, RT)  # they should be equal
+    P₂ = pressure(mix, nmol₂, V₂, RT)
 
-#     Z₁ = P₁ * V₁ / (sum(nmol₁) * RT)  # seems can be reduced to Vᵢ / sum(nmolᵢ)
-#     Z₂ = P₂ * V₂ / (sum(nmol₂) * RT)
+    Z₁ = P₁ * V₁ / (sum(nmol₁) * RT)  # seems can be reduced to Vᵢ / sum(nmolᵢ)
+    Z₂ = P₂ * V₂ / (sum(nmol₂) * RT)
 
-#     if Z₂ > Z₁  # □₂ is gas state, need exchange
-#         P₁, P₂ = P₂, P₁
-#         Z₁, Z₂ = Z₂, Z₁
-#         V₁, V₂ = V₂, V₁
+    if Z₂ > Z₁  # □₂ is gas state, need exchange
+        P₁, P₂ = P₂, P₁
+        Z₁, Z₂ = Z₂, Z₁
+        V₁, V₂ = V₂, V₁
 
-#         for i in eachindex(nmol₁, nmol₂)
-#             nmol₁[i], nmol₂[i] = nmol₂[i], nmol₁[i]
-#         end
-#     end
-#     # now □₁ is gas, □₂ is liquid
-#     return nmol₁, V₁, nmol₂, V₂
-# end
+        for i in eachindex(nmol₁, nmol₂)
+            nmol₁[i], nmol₂[i] = nmol₂[i], nmol₁[i]
+        end
+    end
+    # now □₁ is gas, □₂ is liquid
+    return nmol₁, V₁, nmol₂, V₂
+end
 
-# """
-# Extracts vt-state from `optresult` (Downhill obj).
-# Sorts variables into gas and liquid.
-# Returns corresponding `VTFlashResult`.
-# """
-# function __vt_flash_two_phase_result(
-#     state::S,
-#     mix::BrusilovskyEoSMixture{T},
-#     nmol::AbstractVector{T},
-#     volume::Real,
-#     RT::Real,
-#     optresult,
-# ) where {T, S<:AbstractVTFlashState}
-#     nmol1, volume1 = nmolvol(state, nmol, volume)
+"""
+Extracts vt-state from `optresult` (Downhill obj).
+Sorts variables into gas and liquid.
+Returns corresponding `VTFlashResult`.
+"""
+function __vt_split_result(
+    state::S,
+    mix::AbstractEoSMixture{T},
+    nmol::AbstractVector{T},
+    volume::Real,
+    RT::Real,
+    optresult,
+) where {T, S<:AbstractVTFlashState}
+    nmol1, volume1 = nmolvol(state, nmol, volume)
 
-#     nmol2 = nmol .- nmol1
-#     volume2 = volume - volume1
+    nmol2 = nmol .- nmol1
+    volume2 = volume - volume1
 
-#     nmolgas, volgas, nmolliq, volliq = __sort_phases!(mix, nmol1, volume1, nmol2, volume2, RT)
+    nmolgas, volgas, nmolliq, volliq = __sort_phases!(mix, nmol1, volume1, nmol2, volume2, RT)
 
-#     return VTFlashResult{T, S}(;
-#             converged=optresult.converged,
-#             singlephase=false,
-#             RT=RT,
-#             nmolgas=nmolgas,
-#             volumegas=volgas,
-#             nmolliq=nmolliq,
-#             volumeliq=volliq,
-#             state=state,
-#             iters=optresult.iterations,
-#             calls=optresult.calls,
-#     )
-# end
+    return VTFlashResult{T, S}(;
+            converged=optresult.converged,
+            singlephase=false,
+            RT=RT,
+            nmolgas=nmolgas,
+            volumegas=volgas,
+            nmolliq=nmolliq,
+            volumeliq=volliq,
+            state=state,
+            iters=optresult.iterations,
+            calls=optresult.calls,
+    )
+end
 
 
 # "Return concentration of state with minimum energy from vt-stability tries."

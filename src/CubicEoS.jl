@@ -4,8 +4,8 @@ export AbstractEoSComponent, AbstractEoSMixture
 export molar_mass, carbon_number, name, describe, components, thermo_buffer, ncomponents
 export pressure, wilson_saturation_pressure, compressibility
 export log_c_activity!, log_c_activity, log_c_activity_wj!, log_c_activity_wj
-export vt_stability
-export vt_flash#, vt_flash_newton
+export vt_stability, vt_stability!
+export vt_split, vt_split!
 export converged
 export BrusilovskyEoSComponent, BrusilovskyEoSMixture
 

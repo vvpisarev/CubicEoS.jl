@@ -159,7 +159,7 @@ function vt_split!(
     )
     statex .= optimresult.argument
 
-    return __vt_split_result(state, mix, nmol, volume, RT, optimresult)
+    return VTFlashResult(state, mix, nmol, volume, RT, optimresult)
 end
 
 "Creates closure of helmholtz energy for optimization."
@@ -360,7 +360,7 @@ Extracts vt-state from `optresult` (Downhill obj).
 Sorts variables into gas and liquid.
 Returns corresponding `VTFlashResult`.
 """
-function __vt_split_result(
+function VTFlashResult(
     state::S,
     mix::AbstractEoSMixture{T},
     nmol::AbstractVector{T},

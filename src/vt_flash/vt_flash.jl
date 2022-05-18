@@ -99,6 +99,51 @@ include("state_idealidentity.jl")
 #     )
 # end
 
+unconstrained_eos_step_closure(T::Type{<:AbstractVTFlashState}) = (T, x, d) -> (-Inf, Inf)
+
+function vt_split(
+    mix::AbstractEoSMixture{T},
+    nmol::AbstractVector,
+    volume::Real,
+    RT::Real,
+    trial_concentration::AbstractVector,
+    StateVariables::Type{<:AbstractVTFlashState};
+    tol::Real=1024*eps(T),
+    chemtol::Real=tol,
+    presstol::Real=tol,
+    maxiter::Integer=100,
+    eos_constrain_step::Function=unconstrained_eos_step_closure(StateVariables),
+) where {T}
+    # Renaming
+    concentration = trial_concentration
+
+    saturation = __find_saturation_negative_helmdiff(mix, nmol, volume, RT, concentration;
+        maxsaturation=0.25,
+        maxiter=50,
+        scale=0.5,
+        helmdifftol=-1e-7/RT,
+    )
+
+    if isnan(saturation)
+        @error "VTFlash: Initial state was not found!" mixture=mix nmol=repr(nmol) volume=volume RT=RT
+        error("VTFlash: Initial state was not found!")
+    end
+
+    state = StateVariables(concentration, saturation, nmol, volume)
+
+    return vt_split!(
+        state,
+        mix,
+        nmol,
+        volume,
+        RT;
+        chemtol=chemtol,
+        presstol=presstol,
+        maxiter=maxiter,
+        eos_constrain_step=eos_constrain_step,
+    )
+end
+
 """
     vt_split!(unstable_state, mix, nmol, volume, RT; chemtol, presstol, maxiter)
 
@@ -118,7 +163,7 @@ function vt_split!(
     chemtol::Real,
     presstol::Real,
     maxiter::Int,
-    eos_constrain_step::Function=(StateVariables, x, d) -> (-Inf, Inf),
+    eos_constrain_step::Function=unconstrained_eos_step_closure(StateVariables),
 ) where {StateVariables<:AbstractVTFlashState}
     state = unstable_state
     statex = value(state)

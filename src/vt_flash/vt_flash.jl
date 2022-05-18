@@ -5,6 +5,7 @@ include("state_physical.jl")
 include("state_ratio.jl")
 include("state_idealidentity.jl")
 # include("newton.jl")
+include("utils.jl")
 
 # """
 #     vt_flash(mix, nmol, volume, RT, StateVariables[; tol, chemtol=tol, presstol=tol, maxiter=100])
@@ -99,8 +100,6 @@ include("state_idealidentity.jl")
 #     )
 # end
 
-unconstrained_eos_step_closure(T::Type{<:AbstractVTFlashState}) = (T, x, d) -> (-Inf, Inf)
-
 function vt_split(
     mix::AbstractEoSMixture{T},
     nmol::AbstractVector,
@@ -112,7 +111,7 @@ function vt_split(
     chemtol::Real=tol,
     presstol::Real=tol,
     maxiter::Integer=100,
-    eos_constrain_step::Function=unconstrained_eos_step_closure(StateVariables),
+    eos_constrain_step::Function=unconstrained_eos_step,
 ) where {T}
     # Renaming
     concentration = trial_concentration
@@ -163,7 +162,7 @@ function vt_split!(
     chemtol::Real,
     presstol::Real,
     maxiter::Int,
-    eos_constrain_step::Function=unconstrained_eos_step_closure(StateVariables),
+    eos_constrain_step::Function=unconstrained_eos_step,
 ) where {StateVariables<:AbstractVTFlashState}
     state = unstable_state
     statex = value(state)
@@ -380,26 +379,6 @@ function __vt_split_convergence_closure(
     return convcond
 end
 
-function __sort_phases!(mix, nmol₁, V₁, nmol₂, V₂, RT)
-    P₁ = pressure(mix, nmol₁, V₁, RT)  # they should be equal
-    P₂ = pressure(mix, nmol₂, V₂, RT)
-
-    Z₁ = P₁ * V₁ / (sum(nmol₁) * RT)  # seems can be reduced to Vᵢ / sum(nmolᵢ)
-    Z₂ = P₂ * V₂ / (sum(nmol₂) * RT)
-
-    if Z₂ > Z₁  # □₂ is gas state, need exchange
-        P₁, P₂ = P₂, P₁
-        Z₁, Z₂ = Z₂, Z₁
-        V₁, V₂ = V₂, V₁
-
-        for i in eachindex(nmol₁, nmol₂)
-            nmol₁[i], nmol₂[i] = nmol₂[i], nmol₁[i]
-        end
-    end
-    # now □₁ is gas, □₂ is liquid
-    return nmol₁, V₁, nmol₂, V₂
-end
-
 """
 Extracts vt-state from `optresult` (Downhill obj).
 Sorts variables into gas and liquid.
@@ -433,18 +412,3 @@ function VTFlashResult(
             calls=optresult.calls,
     )
 end
-
-
-# "Return concentration of state with minimum energy from vt-stability tries."
-# function __vt_flash_init_conc_choose(vt_stab_tries)
-#     Dmin = Inf
-#     index_min = -1
-#     for (i, state) in enumerate(vt_stab_tries)
-#         if state.issuccess && !state.isstable && state.energy_density < Dmin
-#             index_min = i
-#             Dmin = state.energy_density
-#         end
-#     end
-#     index_min == -1 && error("Stability tries are inconsistent: Can't choose the one with the lowest energy")
-#     return vt_stab_tries[index_min].concentration
-# end

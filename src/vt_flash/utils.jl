@@ -46,3 +46,5 @@ function concentrationwithlowesttpd(vt_stab_tries)
     index_min == -1 && error("Stability tries are inconsistent: Can't choose the one with the lowest energy")
     return vt_stab_tries[index_min].concentration
 end
+
+vtsplitvariables() = (VTFlashPhysicalState, VTFlashRatioState, VTFlashIdealIdentityState)

@@ -7,105 +7,66 @@ include("state_idealidentity.jl")
 # include("newton.jl")
 include("utils.jl")
 
-# """
-#     vt_flash(mix, nmol, volume, RT, StateVariables[; tol, chemtol=tol, presstol=tol, maxiter=100])
+"""
+    vt_split(mixture, nmol, volume, RT, trial_concetration, StateVariables[;
+        tol, chemtol=tol, presstol=tol, maxiter=100, eos_constrain_step=unconstrained_eos_step]
+    )
 
-# Two-phase thermodynamical equilibrium solver for `mix`ture at given moles `nmol`, `volume`
-# and thermal energy `RT` (VT-flash).
-# Includes two stages, the first is stability checking of single-phase state,
-# if the state is unstable, then an initial two-phase state is constructed,
-# and phase-split is performed with `StateVariables` using Cholesky-BFGS optimization.
+Two-phase thermodynamical phase split solver for `mixture` at given moles `nmol`, `volume`
+and thermal energy `RT` from `trial_concentration` of a phase.
+Phase split is performed with `StateVariables` using Cholesky-BFGS optimization.
 
-# For two-phase state the equilibrium is considered, when
+The phase equilibrium is considered, when
 
-# 1. Chemical potentials are equal in a sense
+1. Chemical potentials are equal in a sense
 
-# ```
-#  1
-# --- maxᵢ |μᵢ' - μᵢ''| < chemtol
-#  RT
-# ```
+```
+ 1
+--- maxᵢ |μᵢ' - μᵢ''| < chemtol
+ RT
+```
 
-# 2. Pressures are equals in a sense
-# ```
-# |P' - P''| volume
-# ----------------- < presstol,
-#    RT sum(nmol)
-# ```
-# where `i` is component index, and `'`, `''` are indexes of phases.
+2. Pressures are equals in a sense
+```
+|P' - P''| volume
+----------------- < presstol,
+   RT sum(nmol)
+```
+where `i` is component index, and `'`, `''` are indexes of phases.
 
-# Return [`VTFlashResult`](@ref).
+Return [`VTFlashResult`](@ref).
 
-# See also [`CubicEoS.vt_flash!`](@ref), [`vt_flash_newton`](@ref).
+See also [`CubicEoS.vt_split!`](@ref), [`vt_flash_newton`](@ref).
 
-# # Arguments
+# Arguments
 
-# - `mix::BrusilovskyEoSMixture{T}`: mixture;
-# - `nmol::AbstractVector`: moles of mixtures' components [mole];
-# - `volume::Real`: volume of mixture [meter³];
-# - `RT::Real`: use to specify temperature of mixture,
-#     `CubicEoS.GAS_CONSTANT_SI * temperature`, [Joule / mole];
-# - `StateVariables::Type{<:AbstractVTFlashState}`: one of state variables to use internally
-#     in phase-split stage.
+- `mix::AbstractEoSMixture{T}`: mixture;
+- `nmol::AbstractVector`: moles of mixtures' components [mole];
+- `volume::Real`: volume of mixture [meter³];
+- `RT::Real`: thermal energy in [Joule / mole], to specify from temperature use `CubicEoS.GAS_CONSTANT_SI * temperature`;
+- `trial_concentration::AbstractVector`: concentration of components in a trial state, should corresponds to negative Helmholtz TPD;
+- `StateVariables::Type{<:AbstractVTFlashState}`: one of state variables, call `CubicEoS.vtsplitvariables()` to list.
 
-# # Optional arguments
+# Optional arguments
 
-# - `chemtol::Real=tol`: tolerance for chemical potentials of components;
-# - `presstol::Real=tol`: tolerance for pressures of phases;
-# - `tol::Real=1024*eps(T)`: default tolerance for both `chemtol` and `presstol`,
-#     `T` is AbstractFloat type defined by `mixture`'s type;
-# - `maxiter::Integer`: maximum allowed steps in phase-split stage.
-# """
-# function vt_flash(
-#     mix::BrusilovskyEoSMixture{T},
-#     nmol::AbstractVector,
-#     volume::Real,
-#     RT::Real,
-#     StateVariables::Type{<:AbstractVTFlashState};
-#     tol::Real=1024*eps(T),
-#     chemtol::Real=tol,
-#     presstol::Real=tol,
-#     maxiter::Integer=100,
-# ) where {T}
-#     stabconverged, singlephase, stability_tries = vt_stability(mix, nmol, volume, RT)
-
-#     !stabconverged && error("VT-Stability does not converged")
-
-#     if singlephase
-#         concentration = nmol ./ volume
-#         saturation = 1
-#         state = StateVariables(concentration, saturation, nmol, volume)
-#         return __vt_flash_single_phase_result(state, mix, nmol, volume, RT)
-#     end
-
-#     concentration = __vt_flash_init_conc_choose(stability_tries)
-#     saturation = __find_saturation_negative_helmdiff(mix, nmol, volume, RT, concentration;
-#         maxsaturation=0.25,
-#         maxiter=50,
-#         scale=0.5,
-#         helmdifftol=-1e-7/RT,
-#     )
-
-#     if isnan(saturation)
-#         @error "VTFlash: Initial state was not found!" mixture=mix nmol=repr(nmol) volume=volume RT=RT
-#         error("VTFlash: Initial state was not found!")
-#     end
-
-#     state = StateVariables(concentration, saturation, nmol, volume)
-
-#     return vt_flash!(state, mix, nmol, volume, RT;
-#         chemtol=chemtol,
-#         presstol=presstol,
-#         maxiter=maxiter
-#     )
-# end
-
+- `chemtol::Real=tol`: tolerance for chemical potentials of components;
+- `presstol::Real=tol`: tolerance for pressures of phases;
+- `tol::Real=1024*eps(T)`: default tolerance for both `chemtol` and `presstol`,
+    `T` is AbstractFloat type defined by `mixture`'s type;
+- `maxiter::Integer`: maximum allowed steps in optimization;
+- `eos_constrain_step::Function=CubicEoS.unconstrained_eos_step`:
+    function of signature `(StateVariables, x, d) -> (αlow, αmax)`.
+    If you have a constraint from EoS of form `A ≤ x + α d ≤ B`,
+    this function returns bounds `αlow` and `αmax` on magnitude of step `α` in optimization step,
+    `x` is `StateVariables` value in the step,
+    `d` is direction (in same variables).
+"""
 function vt_split(
     mix::AbstractEoSMixture{T},
     nmol::AbstractVector,
     volume::Real,
     RT::Real,
-    trial_concentration::AbstractVector,
+    concentration::AbstractVector,
     StateVariables::Type{<:AbstractVTFlashState};
     tol::Real=1024*eps(T),
     chemtol::Real=tol,
@@ -114,8 +75,6 @@ function vt_split(
     eos_constrain_step::Function=unconstrained_eos_step,
 ) where {T}
     # Renaming
-    concentration = trial_concentration
-
     saturation = __find_saturation_negative_helmdiff(mix, nmol, volume, RT, concentration;
         maxsaturation=0.25,
         maxiter=50,
@@ -149,7 +108,7 @@ end
 Perform split phase of VT-flash from an `unstable_state::AbstractVTFlashState`,
 which will be destructed.
 
-For rest of arguments see [`vt_flash`](@ref).
+For rest of arguments see [`vt_split`](@ref).
 
 Return [`VTFlashResult`](@ref).
 """
@@ -263,27 +222,6 @@ function __vt_split_step_closure(
     end
     return clsr
 end
-
-# function __vt_flash_single_phase_result(
-#     state::S,
-#     mix::BrusilovskyEoSMixture,
-#     nmol::AbstractVector{T},
-#     volume::Real,
-#     RT::Real
-# ) where {S, T}
-#     return VTFlashResult{T, S}(;
-#         converged=true,
-#         singlephase=true,
-#         RT=RT,
-#         nmolgas=nmol,
-#         volumegas=volume,
-#         nmolliq=similar(nmol),
-#         volumeliq=0,
-#         state=state,
-#         iters=-1,
-#         calls=-1,
-#     )
-# end
 
 # TODO: check that saturation is valid for physical and eos constraints
 function __find_saturation_negative_helmdiff(

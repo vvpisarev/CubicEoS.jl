@@ -21,3 +21,18 @@ value(state::AbstractVTStabilityState) = state.x
 concentration(state::AbstractVTStabilityState) = error("Not implemented")
 concentration!(conc, ::Type{<:AbstractVTStabilityState}, stateval) = error("Not implemented")
 fromconcentration(::Type{<:AbstractVTStabilityState}, x) = error("Not implemented")
+
+struct VTStabilityResult{T<:Real,S<:AbstractVTStabilityState}
+    issuccess::Bool
+    isstable::Bool
+    energy_density::T
+    concentration::Vector{T}
+    state::S
+    optim::OptimStats
+end
+
+struct OptimStats
+    converged::Bool
+    iters::Int
+    calls::Int
+end

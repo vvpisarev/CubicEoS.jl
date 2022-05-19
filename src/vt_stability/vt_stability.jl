@@ -185,21 +185,6 @@ function vt_stability!(
     return VTStabilityResult(isfinished, isstable, tpd_val, testconc, trialstate, optim)
 end
 
-struct OptimStats
-    converged::Bool
-    iters::Int
-    calls::Int
-end
-
-struct VTStabilityResult{T<:Real,S<:AbstractVTStabilityState}
-    issuccess::Bool
-    isstable::Bool
-    energy_density::T
-    concentration::Vector{T}
-    state::S
-    optim::OptimStats
-end
-
 function __vt_stability_tpd_closure(
     StateVariables::Type{<:AbstractVTStabilityState},
     basestate::VTStabilityBaseState;

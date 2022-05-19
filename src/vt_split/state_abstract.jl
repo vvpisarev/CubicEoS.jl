@@ -1,15 +1,4 @@
 """
-    AbstractVTFlashState(x)
-    AbstractVTFlashState(concentration, saturation, nmolbase, volumebase)
-
-Abstract type for representation of thermodynamic NVT-state in certain variables `x`.
-
-Second constructor uses `concentration` and `saturation` of a phase and
-overall moles and volume of a mixture (`*base`).
-"""
-abstract type AbstractVTFlashState end
-
-"""
     value(s::AbstractVTFlashState)
 
 Argument for optimization in VT-Flash.

@@ -30,9 +30,3 @@ struct VTStabilityResult{T<:Real,S<:AbstractVTStabilityState}
     state::S
     optim::OptimStats
 end
-
-struct OptimStats
-    converged::Bool
-    iters::Int
-    calls::Int
-end

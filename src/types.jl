@@ -12,3 +12,9 @@ See also: [`pressure`](@ref), [`log_c_activity`](@ref), [`log_c_activity!`](@ref
 [`log_c_activity_wj`](@ref), [`log_c_activity_wj!`](@ref)
 """
 thermo_buffer(::AbstractEoSMixture) = error("NotImplemented")
+
+struct OptimStats
+    converged::Bool
+    iters::Int
+    calls::Int
+end

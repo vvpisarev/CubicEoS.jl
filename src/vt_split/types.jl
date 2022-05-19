@@ -1,11 +1,15 @@
-# TODO: deprecate in favor of OptimStats
-struct VTFlashOptimStats
-    converged::Bool
-    iters::Int
-    calls::Int
-end
+"""
+    AbstractVTFlashState(x)
+    AbstractVTFlashState(concentration, saturation, nmolbase, volumebase)
 
-struct VTFlashResult{T, S}  # where {S<:AbstractVTFlashState}
+Abstract type for representation of thermodynamic NVT-state in certain variables `x`.
+
+Second constructor uses `concentration` and `saturation` of a phase and
+overall moles and volume of a mixture (`*base`).
+"""
+abstract type AbstractVTFlashState end
+
+struct VTFlashResult{T, S<:AbstractVTFlashState}
     singlephase::Bool
     RT::T
     nmolgas::Vector{T}
@@ -13,7 +17,7 @@ struct VTFlashResult{T, S}  # where {S<:AbstractVTFlashState}
     nmolliq::Vector{T}
     volumeliq::T
     state::S
-    optim::VTFlashOptimStats
+    optim::OptimStats
 end
 
 @inline converged(x::VTFlashResult) = x.optim.converged
@@ -30,7 +34,7 @@ function VTFlashResult{T, S}(;
     iters=-1,
     calls=-1,
 ) where {T, S}
-    optim = VTFlashOptimStats(converged, iters, calls)
+    optim = OptimStats(converged, iters, calls)
     return VTFlashResult{T, S}(
         singlephase, RT, nmolgas, volumegas, nmolliq, volumeliq, state, optim
     )

@@ -95,7 +95,7 @@ function vt_stability(mixture, nmol, volume, RT, ::Type{StateVariables};
     basestate = VTStabilityBaseState(mixture, nmol, volume, RT; buf=buf)
 
     # prepare TPD closures: TPD, gradient, constrain_step
-    tpd_fdf!, tpd_df! = __vt_stability_tpd_closures(StateVariables, basestate)
+    tpd_fdf! = __vt_stability_tpd_closure(StateVariables, basestate)
 
     # IGNORING COVOLUMES
     constrain_step = __vt_stability_step_closure(StateVariables, eos_constrain_step)
@@ -203,12 +203,11 @@ struct VTStabilityResult{T<:Real,S<:AbstractVTStabilityState}
     optim::OptimStats
 end
 
-function __vt_stability_tpd_closures(
+function __vt_stability_tpd_closure(
     StateVariables::Type{<:AbstractVTStabilityState},
     basestate::VTStabilityBaseState;
     buf::AbstractEoSThermoBuffer=thermo_buffer(basestate.mixture),
 )
-    # for internal usage
     trialstate = StateVariables(similar(basestate.logconcentration))
     trialx = value(trialstate)
 
@@ -220,13 +219,7 @@ function __vt_stability_tpd_closures(
         return tpd, g
     end
 
-    function clsr_tpd_df!(g::AbstractVector, x::AbstractVector)
-        trialx .= x
-        g = helmholtztpdgradient!(g, trialstate, basestate; buf=buf)
-        return g
-    end
-
-    return clsr_tpd_fdf!, clsr_tpd_df!
+    return clsr_tpd_fdf!
 end
 
 "Creates closure-constraint for optimization."

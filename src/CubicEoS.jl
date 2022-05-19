@@ -22,7 +22,7 @@ include("solvecubic.jl")
 include("basic_thermo.jl")
 include("chempotential.jl")
 include("vt_stability/vt_stability.jl")
-include("vt_flash/vt_flash.jl")
+include("vt_split/vt_split.jl")
 
 include("BrusilovskyEoS/BrusilovskyEoS.jl")
 using .BrusilovskyEoS

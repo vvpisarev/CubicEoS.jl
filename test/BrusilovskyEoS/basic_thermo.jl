@@ -1,8 +1,7 @@
-@testset "Basic thermo" begin
+@testset "basic_thermo.jl" begin
     C₁C₅ = CubicEoS.load(BrusilovskyEoSMixture; names=("methane", "n-pentane"))
     RT = 300 * CubicEoS.GAS_CONSTANT_SI
     @testset "Calls w/wo buffers" begin
-        nc = ncomponents(C₁C₅)
         buffer = thermo_buffer(C₁C₅)
 
         N = 2 * [0.8, 1-0.8]

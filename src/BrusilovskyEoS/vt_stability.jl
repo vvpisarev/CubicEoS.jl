@@ -1,5 +1,5 @@
-function eos_constrain_step(
-    StateVariables::Type{<:CubicEoS.VTStabilityIdealIdentityState},
+function eos_vt_stability_constrain_step(
+    ::Type{<:CubicEoS.VTStabilityIdealIdentityState},
     mix::BrusilovskyEoSMixture,
 )
     covolumes = components(mix).b
@@ -22,4 +22,26 @@ function eos_constrain_step(
     end
 
     return clsr
+end
+
+# Condition: dot(x + α d, b) < 1,
+# where x is concentration, d is direction and b is covolumes.
+function eos_vt_stability_constrain_step(
+    ::Type{<:CubicEoS.VTStabilityPhysicalState},
+    mix::BrusilovskyEoSMixture,
+)
+    covolumes = components(mix).b
+
+    function clsr(StateVariables, x, direction)
+        dirdotcov = dot(direction, covolumes)
+        if iszero(dirdotcov)
+            (1 - dot(x, covolumes)) < 0 && throw(CubicEoS.ConstrainStepError("covolume constraint can't be resolved"))
+            # Correct dot(x, covolumes)
+            return -Inf, Inf
+        end
+
+        αmax = dirdotcov > 0 ? (1 - dot(x, covolumes)) / dirdotcov : Inf
+        αlow = dirdotcov < 0 ? (1 - dot(x, covolumes)) / dirdotcov : -Inf
+        return αlow, αmax
+    end
 end

@@ -138,7 +138,7 @@ function vt_stability!(
     trialstate::StateVariables,
     basestate::VTStabilityBaseState,
     optmethod;
-    tpd_fdf!::Function,
+    tpd_fdf!::Function=__vt_stability_tpd_closure(StateVariables, basestate),
     eos_constrain_step::Function=unconstrained_eos_step,
     convcond::Function,
     tpd_thresh::Real=-1e-5,

@@ -1,4 +1,3 @@
-# BrusilovskyEoSMixture -> AbstractEoSMixture
 struct VTStabilityBaseState{F<:Real,V<:AbstractVector{<:F},M<:AbstractEoSMixture}
     logconcentration::V
     RT::F

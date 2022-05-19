@@ -34,7 +34,7 @@ The phase equilibrium is considered, when
 ```
 where `i` is component index, and `'`, `''` are indexes of phases.
 
-Return [`VTFlashResult`](@ref).
+Return [`VTSplitResult`](@ref).
 
 See also [`CubicEoS.vt_split!`](@ref), [`vt_flash_newton`](@ref).
 
@@ -45,7 +45,7 @@ See also [`CubicEoS.vt_split!`](@ref), [`vt_flash_newton`](@ref).
 - `volume::Real`: volume of mixture [meter³];
 - `RT::Real`: thermal energy in [Joule / mole], to specify from temperature use `CubicEoS.GAS_CONSTANT_SI * temperature`;
 - `trial_concentration::AbstractVector`: concentration of components in a trial state, should corresponds to negative Helmholtz TPD;
-- `StateVariables::Type{<:AbstractVTFlashState}`: one of state variables, call `CubicEoS.vtsplitvariables()` to list.
+- `StateVariables::Type{<:AbstractVTSplitState}`: one of state variables, call `CubicEoS.vtsplitvariables()` to list.
 
 # Optional arguments
 
@@ -67,7 +67,7 @@ function vt_split(
     volume::Real,
     RT::Real,
     concentration::AbstractVector,
-    StateVariables::Type{<:AbstractVTFlashState};
+    StateVariables::Type{<:AbstractVTSplitState};
     tol::Real=1024*eps(T),
     chemtol::Real=tol,
     presstol::Real=tol,
@@ -83,8 +83,8 @@ function vt_split(
     )
 
     if isnan(saturation)
-        @error "VTFlash: Initial state was not found!" mixture=mix nmol=repr(nmol) volume=volume RT=RT
-        error("VTFlash: Initial state was not found!")
+        @error "VTSplit: Initial state was not found!" mixture=mix nmol=repr(nmol) volume=volume RT=RT
+        error("VTSplit: Initial state was not found!")
     end
 
     state = StateVariables(concentration, saturation, nmol, volume)
@@ -105,12 +105,11 @@ end
 """
     vt_split!(unstable_state, mix, nmol, volume, RT; chemtol, presstol, maxiter)
 
-Perform split phase of VT-flash from an `unstable_state::AbstractVTFlashState`,
-which will be destructed.
+VT phase split from an `unstable_state::AbstractVTSplitState`, which will be destructed.
 
 For rest of arguments see [`vt_split`](@ref).
 
-Return [`VTFlashResult`](@ref).
+Return [`VTSplitResult`](@ref).
 """
 function vt_split!(
     unstable_state::StateVariables,
@@ -122,7 +121,7 @@ function vt_split!(
     presstol::Real,
     maxiter::Int,
     eos_constrain_step::Function=unconstrained_eos_step,
-) where {StateVariables<:AbstractVTFlashState}
+) where {StateVariables<:AbstractVTSplitState}
     state = unstable_state
     statex = value(state)
 
@@ -162,12 +161,12 @@ function vt_split!(
     )
     statex .= optimresult.argument
 
-    return VTFlashResult(state, mix, nmol, volume, RT, optimresult)
+    return VTSplitResult(state, mix, nmol, volume, RT, optimresult)
 end
 
 "Creates closure of helmholtz energy for optimization."
 function __vt_split_helmdiff_closure(
-    state1::AbstractVTFlashState,
+    state1::AbstractVTSplitState,
     mix::AbstractEoSMixture,
     nmolb::AbstractVector,  # base state
     volumeb::Real,  # base state
@@ -205,7 +204,7 @@ function __vt_split_step_closure(
     ::Type{StateVariables},
     physical_constrain_step::Function,
     eos_constrain_step::Function,
-) where {StateVariables<:AbstractVTFlashState}
+) where {StateVariables<:AbstractVTSplitState}
     function clsr(x::AbstractVector, direction::AbstractVector)
         # Determine bounds from physical and eos constraints
         # Merge the bounds
@@ -268,7 +267,7 @@ function __find_saturation_negative_helmdiff(
 end
 
 function __vt_split_convergence_closure(
-    state1::AbstractVTFlashState,
+    state1::AbstractVTSplitState,
     mix::AbstractEoSMixture{T},
     nmolb::AbstractVector,
     volumeb::Real,
@@ -320,16 +319,16 @@ end
 """
 Extracts vt-state from `optresult` (Downhill obj).
 Sorts variables into gas and liquid.
-Returns corresponding `VTFlashResult`.
+Returns corresponding `VTSplitResult`.
 """
-function VTFlashResult(
+function VTSplitResult(
     state::S,
     mix::AbstractEoSMixture{T},
     nmol::AbstractVector{T},
     volume::Real,
     RT::Real,
     optresult,
-) where {T, S<:AbstractVTFlashState}
+) where {T, S<:AbstractVTSplitState}
     nmol1, volume1 = nmolvol(state, nmol, volume)
 
     nmol2 = nmol .- nmol1
@@ -337,7 +336,7 @@ function VTFlashResult(
 
     nmolgas, volgas, nmolliq, volliq = __sort_phases!(mix, nmol1, volume1, nmol2, volume2, RT)
 
-    return VTFlashResult{T, S}(;
+    return VTSplitResult{T, S}(;
             converged=optresult.converged,
             singlephase=false,
             RT=RT,

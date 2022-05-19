@@ -18,13 +18,13 @@ where
 - `Nᵢ` and `V` are moles and volume of mixture (`nmolbase`, `volumebase`), respectively;
 - `N = Σᵢ Nᵢ` is total moles.
 
-See also [`CubicEoS.AbstractVTFlashState`](@ref).
+See also [`CubicEoS.AbstractVTSplitState`](@ref).
 """
-struct VTFlashIdealIdentityState{V<:AbstractVector} <: AbstractVTFlashState
+struct VTSplitIdealIdentityState{V<:AbstractVector} <: AbstractVTSplitState
     x::V
 end
 
-function nmolvol!(nmol, s::VTFlashIdealIdentityState, nmolbase, volumebase)
+function nmolvol!(nmol, s::VTSplitIdealIdentityState, nmolbase, volumebase)
     x = value(s)
     αnmol = @view x[1:end-1]
     αvol = x[end]
@@ -35,7 +35,7 @@ function nmolvol!(nmol, s::VTFlashIdealIdentityState, nmolbase, volumebase)
     return nmol, volume
 end
 
-function VTFlashIdealIdentityState{V}(
+function VTSplitIdealIdentityState{V}(
     concentration::AbstractVector,
     saturation::Real,
     nmolb::AbstractVector,
@@ -49,14 +49,14 @@ function VTFlashIdealIdentityState{V}(
     @. x[1:end-1] = 2 * sqrt(nmolb) * asin(sqrt(nmol/nmolb))
     x[end] = sqrt(sum(nmolb)) * saturation
 
-    return VTFlashIdealIdentityState{V}(x)
+    return VTSplitIdealIdentityState{V}(x)
 end
 
-@inline VTFlashIdealIdentityState(c, s, n, v) = VTFlashIdealIdentityState{Vector{Float64}}(c, s, n, v)
+@inline VTSplitIdealIdentityState(c, s, n, v) = VTSplitIdealIdentityState{Vector{Float64}}(c, s, n, v)
 
 function gradient!(
     grad::AbstractVector,
-    state::VTFlashIdealIdentityState,
+    state::VTSplitIdealIdentityState,
     mix::AbstractEoSMixture,
     nmolb::AbstractVector,
     volumeb::Real,
@@ -82,7 +82,7 @@ end
 
 function hessian!(
     hess::AbstractMatrix,
-    state::VTFlashIdealIdentityState,
+    state::VTSplitIdealIdentityState,
     mix::AbstractEoSMixture,
     nmolb::AbstractVector,
     volumeb::Real,
@@ -125,7 +125,7 @@ function hessian!(
 end
 
 @inline function physical_constrain_step_uplims(
-    ::Type{<:VTFlashIdealIdentityState},
+    ::Type{<:VTSplitIdealIdentityState},
     nmolbase::AbstractVector,
     volumebase::Real=NaN,  # ignored
 )
@@ -133,7 +133,7 @@ end
 end
 
 # TODO: deprecate, but it stores linear approximation for cubic eos constraint
-# function __vt_flash_optim_closures(
+# function __vt_split_optim_closures(
 #     state1::VTFlashIdealIdentityState,
 #     mix::AbstractEoSMixture,
 #     nmolb::AbstractVector,

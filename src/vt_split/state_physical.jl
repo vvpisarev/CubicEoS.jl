@@ -1,6 +1,6 @@
 """
-    VTFlashPhysicalState(x)
-    VTFlashPhysicalState(concentration, saturation, nmolbase, volumebase)
+    VTSplitPhysicalState(x)
+    VTSplitPhysicalState(concentration, saturation, nmolbase, volumebase)
 
 Moles and volume of '-phase variables (a.k.a physical).
 
@@ -12,20 +12,20 @@ x = [N'₁, ..., N'ₙ, V']
 
 where `N'ᵢ` and `V'`  are moles and volume of `'`-phase, respectively.
 
-See also [`CubicEoS.AbstractVTFlashState`](@ref).
+See also [`CubicEoS.AbstractVTSplitState`](@ref).
 """
-struct VTFlashPhysicalState{V<:AbstractVector} <: AbstractVTFlashState
+struct VTSplitPhysicalState{V<:AbstractVector} <: AbstractVTSplitState
     x::V
 end
 
-function nmolvol!(nmol, s::VTFlashPhysicalState, nmolbase, volumebase)
+function nmolvol!(nmol, s::VTSplitPhysicalState, nmolbase, volumebase)
     x = value(s)
     nmol .= x[1:end-1]
     volume = x[end]
     return nmol, volume
 end
 
-function VTFlashPhysicalState{V}(
+function VTSplitPhysicalState{V}(
     concentration::AbstractVector,
     saturation::Real,
     nmolb::AbstractVector,
@@ -35,14 +35,14 @@ function VTFlashPhysicalState{V}(
     volume1 = saturation * volumeb
     @. x[1:end-1] = concentration * volume1
     x[end] = volume1
-    return VTFlashPhysicalState{V}(x)
+    return VTSplitPhysicalState{V}(x)
 end
 
-@inline VTFlashPhysicalState(c, s, n, v) = VTFlashPhysicalState{Vector{Float64}}(c, s, n, v)
+@inline VTSplitPhysicalState(c, s, n, v) = VTSplitPhysicalState{Vector{Float64}}(c, s, n, v)
 
 function gradient!(
     grad::AbstractVector,
-    state::VTFlashPhysicalState,
+    state::VTSplitPhysicalState,
     mix,
     nmolb,
     volumeb,
@@ -67,7 +67,7 @@ end
 
 function hessian!(
     hess::AbstractMatrix,
-    state::VTFlashPhysicalState,
+    state::VTSplitPhysicalState,
     mix,
     nmolb,
     volumeb,
@@ -90,7 +90,7 @@ function hessian!(
 end
 
 @inline function physical_constrain_step_uplims(
-    ::Type{<:VTFlashPhysicalState},
+    ::Type{<:VTSplitPhysicalState},
     nmolbase::AbstractVector,
     volumebase::Real,
 )

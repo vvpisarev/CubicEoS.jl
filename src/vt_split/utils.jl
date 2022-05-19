@@ -1,5 +1,5 @@
 "EoS constraint with no bounds on magnitude of step for vt phase split."
-unconstrained_eos_step(::Type{<:AbstractVTFlashState}, x, d) = (-Inf, Inf)
+unconstrained_eos_step(::Type{<:AbstractVTSplitState}, x, d) = (-Inf, Inf)
 
 """
     __sort_phases!(mix, nmol₁, V₁, nmol₂, V₂, RT) -> (nmolgas, volumegas, nmolliq, volumeliq)
@@ -47,4 +47,4 @@ function concentrationwithlowesttpd(vt_stab_tries)
     return vt_stab_tries[index_min].concentration
 end
 
-vtsplitvariables() = (VTFlashPhysicalState, VTFlashRatioState, VTFlashIdealIdentityState)
+vtsplitvariables() = (VTSplitPhysicalState, VTSplitRatioState, VTSplitIdealIdentityState)

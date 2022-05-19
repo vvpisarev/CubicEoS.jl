@@ -1,43 +1,43 @@
 """
-    value(s::AbstractVTFlashState)
+    value(s::AbstractVTSplitState)
 
 Argument for optimization in VT-Flash.
 """
-value(s::AbstractVTFlashState) = s.x
+value(s::AbstractVTSplitState) = s.x
 
 "Constructor of a VTFlashState from concentration and saturation."
-(::Type{<:AbstractVTFlashState})(concentration, saturation, nmolbase, volumebase) = error("NotImplemented")
+(::Type{<:AbstractVTSplitState})(concentration, saturation, nmolbase, volumebase) = error("NotImplemented")
 
 """
-    nmolvol!(nmol, state::AbstractVTFlashState, nmolbase, volumebase) -> (nmol, volume)
+    nmolvol!(nmol, state::AbstractVTSplitState, nmolbase, volumebase) -> (nmol, volume)
 
 Destructive option of [`nmolvol`](@ref).
 """
-nmolvol!(nmol, s::AbstractVTFlashState, nmolbase, volumebase) = error("NotImplemented")
+nmolvol!(nmol, s::AbstractVTSplitState, nmolbase, volumebase) = error("NotImplemented")
 
 """
-    nmolvol(state::AbstractVTFlashState, nmolbase, volumebase) -> (nmol, volume)
+    nmolvol(state::AbstractVTSplitState, nmolbase, volumebase) -> (nmol, volume)
 
 Converts a `state` variables into moles `nmol` and `volume`
 from `state` of a corresponding phase.
 
 See also [`nmolvol!`](@ref).
 """
-function nmolvol(s::AbstractVTFlashState, nmolb::V, volumeb::T) where {V, T}
+function nmolvol(s::AbstractVTSplitState, nmolb::V, volumeb::T) where {V, T}
     nmol = similar(nmolb, Float64)  # FIXME: type inference
     return nmolvol!(nmol, s, nmolb, volumeb)
 end
 
 "Vector of upper limits for physical constraint for given state variables."
-physical_constrain_step_uplims(::Type{<:AbstractVTFlashState}, nmolbase, volumebase) = error("NotImplemented")
+physical_constrain_step_uplims(::Type{<:AbstractVTSplitState}, nmolbase, volumebase) = error("NotImplemented")
 
 # Creates closure of physical constrains `0 < x + α d < xuplims`.
 function physical_constrain_step_closure(
-    ::Type{<:AbstractVTFlashState},
+    ::Type{<:AbstractVTSplitState},
     xuplims::AbstractVector,
 )
     function clsr(
-        ::Type{<:AbstractVTFlashState},
+        ::Type{<:AbstractVTSplitState},
         x::AbstractVector,
         direction::AbstractVector,
     )

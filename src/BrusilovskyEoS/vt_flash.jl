@@ -42,7 +42,7 @@ end
 
 # General-purpose covolume constraint based on bisection and moles-volume variables.
 function eos_vt_split_constrain_step(
-    StateVariables::Type{<:CubicEoS.AbstractVTFlashState},
+    StateVariables::Type{<:CubicEoS.AbstractVTSplitState},
     mix::BrusilovskyEoSMixture{T},
     nmolbase::AbstractVector,
     volumebase::Real,
@@ -64,7 +64,7 @@ function eos_vt_split_constrain_step(
     end
 
     function clsr(
-        StateVariables::Type{<:CubicEoS.AbstractVTFlashState},
+        StateVariables::Type{<:CubicEoS.AbstractVTSplitState},
         x,
         direction,
     )
@@ -85,7 +85,7 @@ end
 
 # Effective implementation of covolume constraint for physical variables.
 function eos_vt_split_constrain_step(
-    StateVariables::Type{<:CubicEoS.VTFlashPhysicalState},
+    StateVariables::Type{<:CubicEoS.VTSplitPhysicalState},
     mix::BrusilovskyEoSMixture,
     nmolbase::AbstractVector,
     volumebase::Real,
@@ -94,7 +94,7 @@ function eos_vt_split_constrain_step(
     basedotcov = dot([nmolbase; volumebase], covolumes)
 
     function clsr(
-        StateVariables::Type{<:CubicEoS.VTFlashPhysicalState},
+        StateVariables::Type{<:CubicEoS.VTSplitPhysicalState},
         x,
         direction,
     )
@@ -112,7 +112,7 @@ end
 # TODO: DRY: Seems very similar to implememntation for physical variables,
 # TODO: DRY: only captured variables differ.
 function eos_vt_split_constrain_step(
-    StateVariables::Type{<:CubicEoS.VTFlashRatioState},
+    StateVariables::Type{<:CubicEoS.VTSplitRatioState},
     mix::BrusilovskyEoSMixture,
     nmolbase::AbstractVector,
     volumebase::Real,
@@ -121,7 +121,7 @@ function eos_vt_split_constrain_step(
     basedotcov = sum(covolumes)
 
     function clsr(
-        StateVariables::Type{<:CubicEoS.VTFlashRatioState},
+        StateVariables::Type{<:CubicEoS.VTSplitRatioState},
         x,
         direction,
     )

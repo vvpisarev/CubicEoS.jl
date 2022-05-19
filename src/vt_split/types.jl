@@ -1,15 +1,15 @@
 """
-    AbstractVTFlashState(x)
-    AbstractVTFlashState(concentration, saturation, nmolbase, volumebase)
+    AbstractVTSplitState(x)
+    AbstractVTSplitState(concentration, saturation, nmolbase, volumebase)
 
 Abstract type for representation of thermodynamic NVT-state in certain variables `x`.
 
 Second constructor uses `concentration` and `saturation` of a phase and
 overall moles and volume of a mixture (`*base`).
 """
-abstract type AbstractVTFlashState end
+abstract type AbstractVTSplitState end
 
-struct VTFlashResult{T, S<:AbstractVTFlashState}
+struct VTSplitResult{T, S<:AbstractVTSplitState}
     singlephase::Bool
     RT::T
     nmolgas::Vector{T}
@@ -20,9 +20,9 @@ struct VTFlashResult{T, S<:AbstractVTFlashState}
     optim::OptimStats
 end
 
-@inline converged(x::VTFlashResult) = x.optim.converged
+@inline converged(x::VTSplitResult) = x.optim.converged
 
-function VTFlashResult{T, S}(;
+function VTSplitResult{T, S}(;
     singlephase,
     converged,
     RT,
@@ -35,7 +35,7 @@ function VTFlashResult{T, S}(;
     calls=-1,
 ) where {T, S}
     optim = OptimStats(converged, iters, calls)
-    return VTFlashResult{T, S}(
+    return VTSplitResult{T, S}(
         singlephase, RT, nmolgas, volumegas, nmolliq, volumeliq, state, optim
     )
 end

@@ -1,6 +1,6 @@
 """
-    VTFlashRatioState(x)
-    VTFlashRatioState(concentration, saturation, nmolbase, volumebase)
+    VTSplitRatioState(x)
+    VTSplitRatioState(concentration, saturation, nmolbase, volumebase)
 
 Fractional (ratio) variables for flash.
 Moles and volume of '-phase variables (a.k.a physical).
@@ -16,20 +16,20 @@ where
 - `N'ᵢ` and `V'`  are moles and volume of `'`-phase, respectively;
 - `Nᵢ` and `V` are moles and volume of mixture (`nmolbase`, `volumebase`), respectively.
 
-See also [`CubicEoS.AbstractVTFlashState`](@ref).
+See also [`CubicEoS.AbstractVTSplitState`](@ref).
 """
-struct VTFlashRatioState{V<:AbstractVector} <: AbstractVTFlashState
+struct VTSplitRatioState{V<:AbstractVector} <: AbstractVTSplitState
     x::V
 end
 
-function nmolvol!(nmol, s::VTFlashRatioState, nmolbase, volumebase)
+function nmolvol!(nmol, s::VTSplitRatioState, nmolbase, volumebase)
     x = value(s)
     @. nmol = nmolbase .* x[1:end-1]
     volume = volumebase * x[end]
     return nmol, volume
 end
 
-function VTFlashRatioState{V}(
+function VTSplitRatioState{V}(
     concentration::AbstractVector,
     saturation::Real,
     nmolb::AbstractVector,
@@ -38,14 +38,14 @@ function VTFlashRatioState{V}(
     x = similar(nmolb, Float64, length(nmolb) + 1)
     @. x[1:end-1] = volumeb * saturation * concentration / nmolb
     x[end] = saturation
-    return VTFlashRatioState{V}(x)
+    return VTSplitRatioState{V}(x)
 end
 
-@inline VTFlashRatioState(c, s, n, v) = VTFlashRatioState{Vector{Float64}}(c, s, n, v)
+@inline VTSplitRatioState(c, s, n, v) = VTSplitRatioState{Vector{Float64}}(c, s, n, v)
 
 function gradient!(
     grad::AbstractVector,
-    state::VTFlashRatioState,
+    state::VTSplitRatioState,
     mix::AbstractEoSMixture,
     nmolb::AbstractVector,
     volumeb::Real,
@@ -69,7 +69,7 @@ end
 
 function hessian!(
     hess::AbstractMatrix,
-    state::VTFlashRatioState,
+    state::VTSplitRatioState,
     mix::AbstractEoSMixture,
     nmolb::AbstractVector,
     volumeb::Real,
@@ -94,7 +94,7 @@ function hessian!(
 end
 
 @inline function physical_constrain_step_uplims(
-    ::Type{<:VTFlashRatioState},
+    ::Type{<:VTSplitRatioState},
     nmolbase::AbstractVector,
     volumebase::Real=NaN,
 )

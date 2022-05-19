@@ -3,7 +3,7 @@ include("nvt.jl")
 include("state_abstract.jl")
 include("state_physical.jl")
 include("state_idealidentity.jl")
-
+include("utils.jl")
 
 """
     vt_stability(mixture, nmol, volume, RT[, StateVariables; trial_concentrations, eos_constrain_step, tol=1e-3, tpd_thresh=-1e-5, maxiter=200, buf])
@@ -84,7 +84,7 @@ vt_stability(c1c5, nmol, volume, RT, vars;
 ```
 """
 function vt_stability(mixture, nmol, volume, RT, ::Type{StateVariables};
-    eos_constrain_step::Function=(StateVariables, x, d) -> (-Inf, Inf),
+    eos_constrain_step::Function=unconstrained_eos_step,
     trial_concentrations=nothing,
     tol::Real=1e-3,
     tpd_thresh=-1e-5,
@@ -94,11 +94,7 @@ function vt_stability(mixture, nmol, volume, RT, ::Type{StateVariables};
     # form base state
     basestate = VTStabilityBaseState(mixture, nmol, volume, RT; buf=buf)
 
-    # prepare TPD closures: TPD, gradient, constrain_step
     tpd_fdf! = __vt_stability_tpd_closure(StateVariables, basestate)
-
-    # IGNORING COVOLUMES
-    constrain_step = __vt_stability_step_closure(StateVariables, eos_constrain_step)
 
     # prepare stop criterion closure
     convcond = __vt_stability_convergence_closure(StateVariables, basestate, tol)
@@ -117,7 +113,7 @@ function vt_stability(mixture, nmol, volume, RT, ::Type{StateVariables};
         trialstate = fromconcentration(StateVariables, concentration)
         return vt_stability!(trialstate, basestate, optmethod;
             tpd_fdf! = tpd_fdf!,
-            constrain_step=constrain_step,
+            eos_constrain_step=eos_constrain_step,
             convcond=convcond,
             tpd_thresh=tpd_thresh,
             maxiter=maxiter,
@@ -139,16 +135,18 @@ vt_stability(mixture, nmol, volume, RT; kwargs...) =
     vt_stability(mixture, nmol, volume, RT, VTStabilityIdealIdentityState; kwargs...)
 
 function vt_stability!(
-    trialstate::AbstractVTStabilityState,
+    trialstate::StateVariables,
     basestate::VTStabilityBaseState,
     optmethod;
     tpd_fdf!::Function,
-    constrain_step::Function,
+    eos_constrain_step::Function=unconstrained_eos_step,
     convcond::Function,
     tpd_thresh::Real=-1e-5,
     maxiter::Int=200,
     buf::AbstractEoSThermoBuffer=thermo_buffer(basestate.mixture),
-)
+) where {StateVariables<:AbstractVTStabilityState}
+    constrain_step = __vt_stability_step_closure(StateVariables, eos_constrain_step)
+
     testhessian = let n = ncomponents(basestate.mixture)
         # Matrix{Float64}(undef, (n, n))
         diagm(n, n, 0 => ones(n))

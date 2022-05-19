@@ -1,4 +1,4 @@
-"EoS constraint with no bounds on magnitude of step."
+"EoS constraint with no bounds on magnitude of step for vt phase split."
 unconstrained_eos_step(::Type{<:AbstractVTFlashState}, x, d) = (-Inf, Inf)
 
 """

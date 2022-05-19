@@ -1,5 +1,5 @@
 function eos_constrain_step(
-    StateVariables::Type{CubicEoS.VTStabilityIdealIdentityState},
+    StateVariables::Type{<:CubicEoS.VTStabilityIdealIdentityState},
     mix::BrusilovskyEoSMixture,
 )
     covolumes = components(mix).b

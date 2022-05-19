@@ -91,23 +91,22 @@ function vt_stability(mixture, nmol, volume, RT, ::Type{StateVariables};
     maxiter::Int=1000,
     buf::AbstractEoSThermoBuffer=thermo_buffer(mixture),
 ) where {StateVariables<:AbstractVTStabilityState}
-    # form base state
     basestate = VTStabilityBaseState(mixture, nmol, volume, RT; buf=buf)
 
     tpd_fdf! = __vt_stability_tpd_closure(StateVariables, basestate)
 
-    # prepare stop criterion closure
+    # Prepare stop criterion closure
     convcond = __vt_stability_convergence_closure(StateVariables, basestate, tol)
 
-    # prepare initial guesses, if not provided
-    # INITITAL GUESS FROM A CUBIC EOS
+    # Prepare initial guesses, if not provided
+    # Initital guess from a cubic eos
     if isnothing(trial_concentrations)
         trial_concentrations = let mixtureBrus = load(BrusilovskyEoSMixture; names=map(name, components(mixture)))
             vt_stability_initials_satpressure(mixtureBrus, nmol, RT)
         end
     end
 
-    # run optimizer for each guess
+    # Run optimizer for each guess
     optmethod = Downhill.CholBFGS(basestate.logconcentration)
     results = map(trial_concentrations) do concentration
         trialstate = fromconcentration(StateVariables, concentration)

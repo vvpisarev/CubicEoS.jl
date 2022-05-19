@@ -65,7 +65,15 @@ By default, there is no eos-related constraint.
 - `tol::Real=1e-3`: controls convergence criterion (see above);
 - `tpd_thresh::Real=-1e-5`: negative TPD value, below which state is considered unstable, formally [moles];
 - `maxiter::Int=1000`: maximum number of iterations allowed per minimization;
-- `buf::AbstractEoSThermoBuffer`: cache structure, reduces allocations, by default is `thermo_buffer(mixture)`.
+- `buf::AbstractEoSThermoBuffer=thermo_buffer(mixture)`: cache structure, reduces allocations.
+
+# Return
+
+Return tuple `(issuccess, isstable, results)`, where
+
+- `issuccess::Bool`: if `true`, at least one of tries performed without critical errors;
+- `isstable::Bool`: if `true`, at least one of the succeeded trials shows that single phase state is stable;
+- `results::Vector{VTStabilityResult}`: iterable of solver results ordered as `trial_concentrations`.
 
 # Examples
 
@@ -121,6 +129,7 @@ function vt_stability(mixture, nmol, volume, RT, ::Type{StateVariables};
     end
 
     issuccess = any(x -> x.issuccess, results)
+    # TODO: If we throw error, why we need issuccess flag in return?
     !issuccess && error("VTStability: all tries have failed")
 
     # Not successed results are ignored

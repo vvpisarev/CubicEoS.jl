@@ -66,21 +66,3 @@ function helmholtztpdhessian!(
 
     return hessian
 end
-
-function physical_constrain_step(
-    ::Type{<:VTStabilityIdealIdentityState},
-    trialx::AbstractVector,
-    direction::AbstractVector,
-)
-    αmax = Inf
-    αlow = -Inf
-
-    # Non-negativness
-    for (i, (xi, di)) in enumerate(zip(trialx, direction))
-        (iszero(di) && xi < 0) && throw(ConstrainStepZeroDirectionError(i, xi))
-        αmax = di < 0 ? min(αmax, -xi/di) : αmax
-        αlow = di > 0 ? max(αlow, -xi/di) : αlow
-    end
-
-    return αlow, αmax
-end

@@ -96,5 +96,3 @@ function BrusilovskyThermoBuffer(mix::BrusilovskyEoSMixture{T}) where {T}
     nc = CubicEoS.ncomponents(mix)
     return BrusilovskyThermoBuffer{T}(nc)
 end
-
-CubicEoS.thermo_buffer(mix::BrusilovskyEoSMixture) = BrusilovskyThermoBuffer(mix)

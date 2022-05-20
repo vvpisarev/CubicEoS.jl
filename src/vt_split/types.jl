@@ -20,7 +20,9 @@ struct VTSplitResult{T, S<:AbstractVTSplitState}
     optim::OptimStats
 end
 
-@inline converged(x::VTSplitResult) = x.optim.converged
+converged(x::VTSplitResult) = converged(x.optim)
+iters(x::VTSplitResult) = iters(x.optim)
+calls(x::VTSplitResult) = calls(x.optim)
 
 function VTSplitResult{T, S}(;
     singlephase,

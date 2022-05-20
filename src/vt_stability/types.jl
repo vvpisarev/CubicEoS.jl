@@ -1,3 +1,10 @@
+"""
+    VTStabilityBaseState(logconcentration, RT, mixture, logcactivity, pressure)
+    VTStabilityBaseState(mixture, nmol, volume, RT[; buf])
+
+Thermodynamical state of base (bulk, single phase) state.
+Stores constant values of the state.
+"""
 struct VTStabilityBaseState{F<:Real,V<:AbstractVector{<:F},M<:AbstractEoSMixture}
     logconcentration::V
     RT::F
@@ -29,3 +36,7 @@ struct VTStabilityResult{T<:Real,S<:AbstractVTStabilityState}
     state::S
     optim::OptimStats
 end
+
+converged(x::VTStabilityResult) = converged(x.optim)
+iters(x::VTStabilityResult) = iters(x.optim)
+calls(x::VTStabilityResult) = calls(x.optim)

@@ -3,6 +3,8 @@
 
 Compute pressure (Pa) of `substance` at given number of moles `nmol` (mol),
 total volume `V` (m³) and thermal energy `RT` (J mol⁻¹).
+
+**Required.**
 """
 function pressure(substance::AbstractEoSComponent, nmol::Real, V::Real, RT::Real)
     error("NotImplemented")

@@ -2,19 +2,7 @@ CubicEoS.molar_mass(x::BrusilovskyEoSComponent) = x.molar_mass
 CubicEoS.name(x::BrusilovskyEoSComponent) = x.name
 CubicEoS.carbon_number(x::BrusilovskyEoSComponent) = x.carbon_number
 
-function CubicEoS.describe(x::BrusilovskyEoSComponent)
-    return Dict{String,Any}(
-        "data structure" => repr(x),
-        "name" => CubicEoS.name(x),
-        "critical pressure [Pa]" => x.Pc,
-        "critical temperature [K]" => x.RTc / CubicEoS.GAS_CONSTANT_SI,
-        "pitzer acentric factor" => x.acentric_factor,
-        "molar mass [kg mol⁻¹]" => x.molar_mass,
-        "number of carbons atoms" => x.carbon_number,
-        "eos" => "brusilovsky",
-        "eos param: ac [?]" => x.ac,
-        "eos param: b [?]"  => x.b,
-        "eos param: c [?]"  => x.c,
-        "eos param: d [?]"  => x.d,
-    )
-end
+CubicEoS.components(x::BrusilovskyEoSMixture) = x.components
+CubicEoS.ncomponents(x::BrusilovskyEoSMixture) = length(components(x))
+Base.show(io::IO, x::BrusilovskyEoSMixture) = print(io, "BrusilovskyEoSMixture($(CubicEoS.name(x)))")
+CubicEoS.thermo_buffer(mix::BrusilovskyEoSMixture) = BrusilovskyThermoBuffer(mix)

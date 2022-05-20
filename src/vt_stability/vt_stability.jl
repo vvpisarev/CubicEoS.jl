@@ -155,6 +155,8 @@ function vt_stability!(
 ) where {StateVariables<:AbstractVTStabilityState}
     constrain_step = __vt_stability_step_closure(StateVariables, eos_constrain_step)
 
+    # TODO: Seems that for idealidentity variables, ones is OK
+    # TODO: but, for physical variables true hessian is better
     testhessian = let n = ncomponents(basestate.mixture)
         # Matrix{Float64}(undef, (n, n))
         diagm(n, n, 0 => ones(n))

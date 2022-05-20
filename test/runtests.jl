@@ -1,9 +1,6 @@
 using CubicEoS
-using CubicEoSDatabase
+using CubicEoSDatabase: Data
 using Test
-
-
-#= Utilities =#
 
 "Non-recursively compare field values of `x` and `y`."
 function compare_structs(x::T, y::T) where {T}
@@ -12,15 +9,10 @@ function compare_structs(x::T, y::T) where {T}
     end
 end
 
-
 @testset "CubicEoS.jl" begin
-    include("dbload.jl")
-    include("basic_thermo.jl")
-    include("chempotential.jl")
     include("solvecubic.jl")
-    include("vt_stability.jl")
-    include("vt_flash/nvt.jl")
-    include("vt_flash/state_idealidentity.jl")
-    include("vt_flash/newton.jl")
-    include("vt_flash/vt_flash.jl")
+    include("newton.jl")
+    include("BrusilovskyEoS/BrusilovskyEoS.jl")
+    include("vt_stability/vt_stability.jl")
+    include("vt_split/vt_split.jl")
 end

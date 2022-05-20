@@ -1,176 +1,13 @@
-#=
-Basic thermodynamic properties
-=#
-using LinearAlgebra
-
-include("solvecubic.jl")
-
-@inline ncomponents(mix::BrusilovskyEoSMixture) = length(mix.components)
-@inline Base.length(mix::BrusilovskyEoSMixture) = length(mix.components)
-
-"""
-    a_coef(substance, RT)
-
-Return EoS coefficient ``a(T, Ψ) = a_c ϕ(T, Ψ)`` of `substance` at given `RT`.
-```math
-ϕ(T, Ψ) = [ 1 + Ψ (1 - T_r^0.5) ]^2
-```
-Reference: Brusilovsky2002[section: 5.5.2 (algorithm step 3), eq: (4.34), see p.142 and p.164]
-"""
-function a_coef(substance::BrusilovskyEoSComponent, RT::Real)
-    psi = substance.Psi
-    phi = ( 1.0 + psi * (1.0 - sqrt(RT / substance.RTc)) )^2
-    return substance.ac * phi
-end
-
-"""
-    pressure(substance, υ, RT)
-
-Compute pressure (Pa) of `substance` at given molar volume `υ` (m³ mol⁻¹) and
-thermal energy `RT` (J mol⁻¹).
-"""
-function pressure(substance::BrusilovskyEoSComponent, υ::Real, RT::Real)
-    acoeff = a_coef(substance, RT)
-    b = substance.b
-    c = substance.c
-    d = substance.d
-    return RT / (υ - b) - acoeff / ((υ + c) * (υ + d))
-end
-
 """
     pressure(substance, nmol, V, RT)
 
 Compute pressure (Pa) of `substance` at given number of moles `nmol` (mol),
 total volume `V` (m³) and thermal energy `RT` (J mol⁻¹).
+
+**Required.**
 """
-function pressure(substance::BrusilovskyEoSComponent, nmol::Real, V::Real, RT::Real)
-    acoeff = a_coef(substance, RT)
-    b = substance.b
-    c = substance.c
-    d = substance.d
-    υ = V / nmol
-    return RT / (υ - b) - acoeff / ((υ + c) * (υ + d))
-end
-
-"""
-    pressure(substance; nmol = 1, volume, temperature)
-
-Compute pressure (Pa) of `substance` at given number of moles `nmol` (mol),
-total volume (m³) and temperature (K).
-"""
-function pressure(
-    substance::BrusilovskyEoSComponent;
-    nmol::Real = 1,
-    volume::Real,
-    temperature::Real,
-)
-    RT = GAS_CONSTANT_SI * temperature
-    return pressure(substance, nmol, volume, RT)
-end
-
-"""
-    wilson_saturation_pressure(substance, RT)
-
-Return approximate saturation pressure of `substance` at `RT` (J mol⁻¹).
-
-Reference: Brusilovsky2002 [p 272, eq 5.4]
-"""
-function wilson_saturation_pressure(substance::BrusilovskyEoSComponent, RT::Real)
-    return wilson_saturation_pressure(
-        substance.Pc, substance.RTc, substance.acentric_factor, RT
-    )
-end
-
-"""
-    wilson_saturation_pressure(Pc::Real, RTc::Real, acentric_factor::Real, RT::Real)
-
-Approximate saturation pressure at `RT` using Wilson correlation.
-
-# Arguments
-- `Pc::Real` - critical pressure
-- `RTc::Real` - gas constant * critical temperature
-- `acentric_factor::Real` - acentric factor
-- `RT::Real` - gas constant * temperature
-
-Reference: Brusilovsky2002 [p 272, eq 5.4], Mikyska2010 DOI 10.1002/aic.12387 [Algorithm step 1]
-"""
-function wilson_saturation_pressure(Pc::Real, RTc::Real, acentric_factor::Real, RT::Real)
-    return Pc * exp(5.373 * (1.0 + acentric_factor) * (1.0 - RTc / RT))
-end
-
-"""
-    eos_parameters(mixture::BrusilovskyEoSMixture, nmol, RT[; buf])
-
-Return `Am`, `Bm`, `Cm`, `Dm` coefficients and `aij` matrix of EoS for `mixture` with
-composition `nmol` and thermal energy `RT`. Allocations may be avoided by passing `buf`.
-
-# Arguments
-- `nmol::AbstractVector`: Vector of composition
-- `RT::Real`: Thermal energy (J mol⁻¹)
-
-# Keywords
-- `buf`: see ?pressure(mixture)
-"""
-function eos_parameters(
-    mixture::BrusilovskyEoSMixture,
-    nmol::AbstractVector{<:Real},
-    RT::Real;
-    buf = NamedTuple(),
-)
-    return __eos_parameters_impl__(mixture, nmol, RT, buf)
-end
-
-# When `buf` is BrusilovskyThermoBuffer
-function __eos_parameters_impl__(
-    mixture::BrusilovskyEoSMixture{T},
-    nmol::AbstractVector{<:Real},
-    RT::Real,
-    buf::BrusilovskyThermoBuffer{T},
-) where {T}
-    aij = buf.matr
-    ai = buf.vec1
-    return __eos_parameters_impl__(mixture, nmol, RT, ai, aij)
-end
-
-# When `buf` is mapping-like object
-function __eos_parameters_impl__(
-    mixture::BrusilovskyEoSMixture{T},
-    nmol::AbstractVector{<:Real},
-    RT::Real,
-    buf::Union{NamedTuple, AbstractDict},
-) where {T}
-    nc = length(nmol)
-    aij = haskey(buf, :aij) ? buf[:aij] : Matrix{T}(undef, nc, nc)
-    ai = haskey(buf, :ai) ? buf[:ai] : Vector{T}(undef, nc)
-    return __eos_parameters_impl__(mixture, nmol, RT, ai, aij)
-end
-
-# Core function
-# See Brusilovsky2002 [p 187, eqs 4.159, 4.163-4.165] and [p 189, eq 4.168]
-function __eos_parameters_impl__(
-    mixture::BrusilovskyEoSMixture{T},
-    nmol::AbstractVector{<:Real},
-    RT::Real,
-    auxv::AbstractVector{<:Real},
-    auxm::AbstractMatrix{<:Real},
-) where {T}
-    ai, aij = auxv, auxm
-
-    comp = mixture.components
-    psi = comp.Psi
-    ac = comp.ac
-    @. ai = ac * (1 + psi * (1 - sqrt(RT / comp.RTc)) )^2
-
-    bi, ci, di = comp.b, comp.c, comp.d
-    Bm = dot(nmol, bi)
-    Cm = dot(nmol, ci)
-    Dm = dot(nmol, di)
-
-    tempC = RT / GAS_CONSTANT_SI - 273.16
-    eij, gij, hij = mixture.eij, mixture.gij, mixture.hij
-    aij .= (one(T) .- (eij .+ tempC .* (gij .+ tempC .* hij))) .* sqrt.(ai .* ai')
-    Am = dot(nmol, aij, nmol)  # Am = nmolᵀ aij nmol
-    return Am, Bm, Cm, Dm, aij
+function pressure(substance::AbstractEoSComponent, nmol::Real, V::Real, RT::Real)
+    error("NotImplemented")
 end
 
 """
@@ -185,30 +22,48 @@ Return pressure (Pa) of `mixture` at given
 Allocations may be avoided by passing `buf`.
 
 # Keywords
-- `buf::Union{BrusilovskyThermoBuffer,NamedTuple,AbstractDict}`: Buffer for intermediate
-    calculations. In case of `NamedTuple` and `AbstractDict` `buf` should contain `buf[:ai]`
-    `NC = ncomponents(mixture)` vector and `buf[:aij]` NCxNC matrix.
+- `buf::AbstractEoSThermoBuffer`: buffer for intermediate calculations.
 
-See also: [`thermo_buffer`](@ref)
+See also: [`thermo_buffer`](@ref).
 """
 function pressure(
-    mixture::BrusilovskyEoSMixture,
+    mixture::AbstractEoSMixture,
     nmol::AbstractVector,
     volume::Real,
     RT::Real;
-    buf = NamedTuple(),
+    buf::AbstractEoSThermoBuffer=thermo_buffer(mixture),
 )
-    Am, Bm, Cm, Dm, _ = eos_parameters(mixture, nmol, RT; buf = buf)
-    return sum(nmol) * RT / (volume - Bm) - Am/((volume + Cm) * (volume + Dm))
+    error("NotImplemented")
 end
 
 """
-    compressibility(mixture, χ, P, RT[, phase='g'][; buf])
+    wilson_saturation_pressure(Pc::Real, RTc::Real, acentric_factor::Real, RT::Real)
+
+Approximate saturation pressure at `RT` using Wilson correlation.
+
+# Arguments
+
+- `Pc::Real` - critical pressure
+- `RTc::Real` - gas constant * critical temperature
+- `acentric_factor::Real` - acentric factor
+- `RT::Real` - gas constant * temperature
+
+Reference: Brusilovsky2002 [p 272, eq 5.4], Mikyska2010 DOI 10.1002/aic.12387 [Algorithm step 1]
+"""
+function wilson_saturation_pressure(Pc::Real, RTc::Real, acentric_factor::Real, RT::Real)
+    return Pc * exp(5.373 * (1.0 + acentric_factor) * (1.0 - RTc / RT))
+end
+
+# Seems not necessary for each EoS
+function wilson_saturation_pressure(substance::AbstractEoSComponent, RT::Real) end
+
+"""
+    compressibility(mixture, nmol, pressure, RT[, phase='g'][; buf])
 
 Compute compressibility (z-factor) of `mixture` in `phase` at given
 
-- composition in moles `χ` (mol)
-- pressure `P` (Pa)
+- composition in moles `nmol` (mol)
+- pressure `pressure` (Pa)
 - thermal energy `RT` (J mol⁻¹)
 
 # Optional arguments
@@ -222,38 +77,26 @@ Compute compressibility (z-factor) of `mixture` in `phase` at given
 See also: [`pressure`](@ref)
 """
 function compressibility(
-    mix::BrusilovskyEoSMixture,
-    χ::AbstractVector,
-    P,
+    mix::AbstractEoSMixture,
+    nmol::AbstractVector,
+    pressure,
     RT,
     phase::AbstractChar;
-    buf = NamedTuple(),
+    buf::AbstractEoSThermoBuffer=thermo_buffer(mix),
 )
-    zroots = zfactors(mix, χ, P, RT; buf=buf)
+    zroots = zfactors(mix, nmol, pressure, RT; buf=buf)
     return zfactorchoose(zroots, phase)
 end
 
+"Compressibility factors of a `mixture`."
 function zfactors(
-    mix::BrusilovskyEoSMixture,
-    molfrac::AbstractVector,
+    mixture::AbstractEoSMixture,
+    nmol::AbstractVector,
     pressure,
     RT::Real;
-    buf = NamedTuple(),
+    buf::AbstractEoSThermoBuffer=thermo_buffer(mix),
 )
-    ntotal = sum(molfrac)
-    am, bm, cm, dm = eos_parameters(mix, molfrac, RT; buf=buf)
-    prt = pressure / (RT * ntotal)
-    am *= prt / (RT * ntotal)
-    bm *= prt
-    cm *= prt
-    dm *= prt
-    zroots = solve_cubic(
-        1.0,
-        cm + dm - bm - 1.0,
-        am - bm * cm + cm * dm - bm * dm - dm - cm,
-        -bm * cm * dm - cm * dm - am * bm,
-    )
-    return zroots
+    error("NotImplemented")
 end
 
 # TODO: Symbols instead of chars

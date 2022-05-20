@@ -66,39 +66,3 @@ function helmholtztpdhessian!(
 
     return hessian
 end
-
-function __constrain_step(
-    ::Type{VTStabilityIdealIdentityState},
-    trialx::AbstractVector,
-    direction::AbstractVector,
-    covolumes::AbstractVector,
-)
-    αmax = Inf
-    αlow = -Inf
-
-    # Non-negativness
-    for (i, (xi, di)) in enumerate(zip(trialx, direction))
-        (iszero(di) && xi < 0) && throw(ConstrainStepZeroDirectionError(i, xi))
-        αmax = di < 0 ? min(αmax, -xi/di) : αmax
-        αlow = di > 0 ? max(αlow, -xi/di) : αlow
-    end
-
-    # Size of trial phase
-    A = sum(d*d*b for (d, b) in zip(direction, covolumes))
-    B = 2 * sum(x*d*b for (x, d, b) in zip(trialx, direction, covolumes))
-    C = -4 + sum(x*x*b for (x, b) in zip(trialx, covolumes))
-
-    A < 0 && throw(ConstrainStepError("parabolic condition wrong"))
-    αcov = solve_quadratic(A, B, C)
-
-    # If there are one or zero roots, covolume inequality constraint has no solutions.
-    any(isnan, αcov) && throw(ConstrainStepError("covolume constraint can't be resolved"))
-
-    αlocov, αhicov = extrema(αcov)
-    αlow = max(αlocov, αlow)
-    αmax = min(αhicov, αmax)
-
-    (αmax ≤ 0 || αmax ≤ αlow) && throw(ConstrainStepLowerBoundError(trialx, direction))
-
-    return αmax
-end

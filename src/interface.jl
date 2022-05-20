@@ -1,60 +1,69 @@
+#
+# Interface of a component
+#
+
 """
     molar_mass(c::AbstractEoSComponent)
 
-Return the molar mass of a component.
+**Required**. Molar mass of a component [kg mole⁻¹].
 """
-function molar_mass end
+molar_mass(c::AbstractEoSComponent) = error("NotImplemented")
 
 """
     carbon_number(c::AbstractEoSComponent)
 
-Return the number of carbons atoms in the hydrocarbon chain.
+**Required**. Number of carbons atoms in the hydrocarbon chain.
 """
-function carbon_number end
+carbon_number(c::AbstractEoSComponent) = error("NotImplemented")
 
 """
     name(c::AbstractEoSComponent)
+    name(m::AbstractEoSMixture)
 
-Return the component species name.
+**Required**. Name of component (mixture) as `String`-like object.
+By default, name of mixture is concatenation of its components names.
 """
-function name end
+name
 
-"""
-    describe(c::AbstractEoSComponent)
-
-Return `Dict` of parameters. Useful for logging.
-"""
-function describe end
+name(c::AbstractEoSComponent) = error("NotImplemented")
 
 """
-    load(::Type{T}; name::AbstractString, databases) where {T<:AbstractEoSComponent}
+    load(::Type{<:AbstractEoSComponent}; name::AbstractString, databases)
 
 Load component `::T` by its `name` by joining the data on this species in `databases`.
 """
-function load end
+load(::Type{T}; name, component_dbs) where {T<:AbstractEoSComponent} = error("NotImplemented")
 
+#
+# Interface of a mixture
+#
 
-Base.length(m::AbstractEoSMixture) = m.number_of_components
-Base.show(io::IO, x::AbstractEoSMixture) = print(io, "$(typeof(x))($(name(x)))")
+"""
+    ncomponents(mixture::AbstractEoSMixture) -> Int
 
-components(m::AbstractEoSMixture) = m.components
+**Required**. Number of components in `mixture`.
+"""
+ncomponents(m::AbstractEoSMixture) = error("NotImplemented")
+
+"""
+    components(mixture::AbstractEoSMixture)
+
+**Required**. Iterable of corresponding eos components.
+"""
+components(m::AbstractEoSMixture) = error("NotImplemented")
+
 name(m::AbstractEoSMixture) = join(map(name, components(m)), " + ")
-describe(m::AbstractEoSMixture) = Dict{String,Any}("noparameters" => NaN)
-load(::Type{T}; names, physdb) where {T<:AbstractEoSMixture} = error("NotImpemented")
+load(::Type{T}; names, component_dbs, mix_eos_db) where {T<:AbstractEoSMixture} = error("NotImpemented")
 
-function describe(x::BrusilovskyEoSComponent)
-    return Dict{String,Any}(
-        "data structure" => repr(x),
-        "name" => name(x),
-        "critical pressure [Pa]" => x.Pc,
-        "critical temperature [K]" => x.Tc,
-        "pitzer acentric factor" => x.acentric_factor,
-        "molar mass [kg mol⁻¹]" => x.molar_mass,
-        "number of carbons atoms" => x.carbon_number,
-        "eos" => "brusilovsky",
-        "eos param: ac [?]" => x.ac,
-        "eos param: b [?]"  => x.b,
-        "eos param: c [?]"  => x.c,
-        "eos param: d [?]"  => x.d,
-    )
-end
+# TODO: Perhapse, we need a (singleton) object to represent absence of buffer
+"""
+    thermo_buffer(mixture::AbstractEoSMixture) -> AbstractEoSThermoBuffer
+
+Allocate buffer for intermediate calculations of mixture thermodynamic properties.
+
+It is passed in a number of functions:
+[`pressure`](@ref), [`log_c_activity!`](@ref), [`log_c_activity_wj!`](@ref)...
+
+The method is optional, default is `nothing`.
+"""
+thermo_buffer(m::AbstractEoSMixture) = nothing

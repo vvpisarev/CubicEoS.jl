@@ -1,4 +1,11 @@
-struct VTStabilityBaseState{F<:Real,V<:AbstractVector{<:F},M<:BrusilovskyEoSMixture{<:F}}
+"""
+    VTStabilityBaseState(logconcentration, RT, mixture, logcactivity, pressure)
+    VTStabilityBaseState(mixture, nmol, volume, RT[; buf])
+
+Thermodynamical state of base (bulk, single phase) state.
+Stores constant values of the state.
+"""
+struct VTStabilityBaseState{F<:Real,V<:AbstractVector{<:F},M<:AbstractEoSMixture}
     logconcentration::V
     RT::F
     mixture::M
@@ -20,3 +27,16 @@ value(state::AbstractVTStabilityState) = state.x
 concentration(state::AbstractVTStabilityState) = error("Not implemented")
 concentration!(conc, ::Type{<:AbstractVTStabilityState}, stateval) = error("Not implemented")
 fromconcentration(::Type{<:AbstractVTStabilityState}, x) = error("Not implemented")
+
+struct VTStabilityResult{T<:Real,S<:AbstractVTStabilityState}
+    issuccess::Bool
+    isstable::Bool
+    energy_density::T
+    concentration::Vector{T}
+    state::S
+    optim::OptimStats
+end
+
+converged(x::VTStabilityResult) = converged(x.optim)
+iters(x::VTStabilityResult) = iters(x.optim)
+calls(x::VTStabilityResult) = calls(x.optim)

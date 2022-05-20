@@ -2,13 +2,20 @@
 
 [![Code Style: Blue](https://img.shields.io/badge/code%20style-blue-4495d1.svg)](https://github.com/invenia/BlueStyle)
 
-CubicEoS.jl implements functions to work with substances and mixtures described by cubic equations of state. This includes
+CubicEoS.jl is an extensible package for thermodynamic calculations. The package defines an abstract interface needed to implement an equation of state (EoS) and uses it to calculate NVT phase equilibrium.
 
-- Basic thermodynamics: pressure, z-factor, chemical potential etc.;
-- Check of NVT stability of single-phase state;
-- Phase equilibrium calculation for NVT variables.
+As an example of EoS, the package implements the general cubic equation of state [[Brusilovsky, SPE Reservoir Engineering, February 1992](https://doi.org/10.2118/20180-PA)]. To implement an EoS you need, use `src/BrusilovskyEoS` submodule as a template.
 
-So far, the general cubic equation of state [[Brusilovsky, SPE Reservoir Engineering, February 1992](https://doi.org/10.2118/20180-PA)] is implemented.
+TODO: add links to other extensions: CPPCSAFT and MBWREoS.
+
+What CubicEoS.jl do provide?
+
+- Interface needed to solve NVT phase equilibrium problem;
+- NVT solvers: phase stability and phase split which
+  - Support automatic differentation;
+  - Based on optimization: currently uses Cholesky BFGS with control of step from **[Downhill.jl](https://github.com/vvpisarev/Downhill.jl)**;
+  - Provide choice of internal variables for better scaling of a problem;
+- Implementation of the general equation of state.
 
 Most of implemented functions
 
@@ -23,6 +30,10 @@ The package registry is **[LammpsToolsRegistry](https://github.com/stepanzh-test
 ]pkg> registry add https://github.com/stepanzh-test-org/LammpsToolsRegistry
 pkg> add CubicEoS
 ```
+
+## Documentation
+
+Currently, only docstrings are provided. You may also take a look at tests with minimal working examples.
 
 ## Brusilovsky equation of state
 
@@ -66,7 +77,7 @@ wilson_saturation_pressure(component, RT)
 ```
 
 ```julia
-compressibility(mixture, molar_composition, pressure, RT, phase='g')
+compressibility(mixture, nmol, pressure, RT, phase='g')
 ```
 
 ## Chemical potential
@@ -85,17 +96,26 @@ In case of a component you may use a mixture of one component.
 **Phase stability.** To check if a single-phase state is stable, defined in NVT variables, use
 
 ```julia
-isstable, vtstab_results = vt_stability(mix, nmol, volume, RT)
+issuccess, isstable, results = vt_stability(mix, nmol, volume, RT, StateVariables)
 ```
 
-**Flash.** To calculate NVT phase equilibrium use
+**Phase split.** To calculate NVT phase equilibrium use
 
 ```julia
-# quasi-Newton phase split
-flash_result = vt_flash(mix, nmol, volume, RT, StateVariables[; tol, maxiter])
-# Newton phase split
-flash_result = vt_flash_newton(mix, nmol, volume, RT, StateVariables[; tol, maxiter])
+result = vt_split(mix, nmol, volume, RT, trial_concentration, StateVariables)
 ```
 
-where type `StateVariables` defines an internal variables used at phase split stage in optimization solver (e.g. `CubicEoS.PhysicalState`). Quasi-Newton solver is implemented in **[Downhill.jl](https://github.com/vvpisarev/Downhill.jl)**.
+where type `StateVariables` defines an internal variables used at phase split stage in optimization solver (e.g. `CubicEoS.PhysicalState`). For the split `trial_concentration` is given from results of the stability.
+
+There are several options to control behavior of the solvers. Check docstrings of `vt_stability` and `vt_split` for overview.
+
+## Extensions to other equations of state
+
+Currently, to implement an EoS you need, use `src/BrusilovskyEoS` submodule as a template (check functions that add methods to the main module, e.g. `CubicEoS.pressure`).
+
+Briefly speaking, the interface can be divided into servicing and physical categories. The servicing interface mostly requires getter-like functions. The physical interface requires minimal set of functions to compute pressure, activity coefficients and constraints on phases introducing by an EoS.
+
+Currently, there are several EoS under development:
+
+TODO: add links to other extensions: CPPCSAFT and MBWREoS.
 

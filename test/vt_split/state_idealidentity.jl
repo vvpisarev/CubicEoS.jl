@@ -1,4 +1,4 @@
-@testset "IdealIdentity variables" begin
+@testset "VTSplitIdealIdentityState variables" begin
     nmol = [1.5, 2.5, 4.3]
     volume = 0.3e-6
 
@@ -6,7 +6,7 @@
     volumeb = volume + 0.7e-6
 
     let concentration = nmol / volume, saturation = volume / volumeb
-        state = CubicEoS.IdealIdentityState(concentration, saturation, nmolb, volumeb)
+        state = CubicEoS.VTSplitIdealIdentityState(concentration, saturation, nmolb, volumeb)
         nmolt, volt = CubicEoS.nmolvol(state, nmolb, volumeb)
 
         @test nmolt ≈ nmol

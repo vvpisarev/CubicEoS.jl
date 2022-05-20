@@ -24,37 +24,31 @@ function name end
 
 Return `Dict` of parameters. Useful for logging.
 """
-function describe end
+describe(x::AbstractEoSComponent) = error("NotImplemented")
 
 """
     load(::Type{T}; name::AbstractString, databases) where {T<:AbstractEoSComponent}
 
 Load component `::T` by its `name` by joining the data on this species in `databases`.
 """
-function load end
+load(::Type{T}; name, component_dbs) where {T<:AbstractEoSComponent} = error("NotImplemented")
 
+"""
+    ncomponents(mixture::AbstractEoSMixture)
 
-Base.length(m::AbstractEoSMixture) = m.number_of_components
+Number of components in `mixture`.
+"""
+function ncomponents end
+
+@inline components(m::AbstractEoSMixture) = m.components
+
+@inline ncomponents(m::AbstractEoSMixture) = length(components(m))
+@inline Base.length(m::AbstractEoSMixture) = length(components(m))
+
+# Base.length(m::AbstractEoSMixture) = m.number_of_components
 Base.show(io::IO, x::AbstractEoSMixture) = print(io, "$(typeof(x))($(name(x)))")
 
-components(m::AbstractEoSMixture) = m.components
 name(m::AbstractEoSMixture) = join(map(name, components(m)), " + ")
 describe(m::AbstractEoSMixture) = Dict{String,Any}("noparameters" => NaN)
-load(::Type{T}; names, physdb) where {T<:AbstractEoSMixture} = error("NotImpemented")
 
-function describe(x::BrusilovskyEoSComponent)
-    return Dict{String,Any}(
-        "data structure" => repr(x),
-        "name" => name(x),
-        "critical pressure [Pa]" => x.Pc,
-        "critical temperature [K]" => x.Tc,
-        "pitzer acentric factor" => x.acentric_factor,
-        "molar mass [kg mol⁻¹]" => x.molar_mass,
-        "number of carbons atoms" => x.carbon_number,
-        "eos" => "brusilovsky",
-        "eos param: ac [?]" => x.ac,
-        "eos param: b [?]"  => x.b,
-        "eos param: c [?]"  => x.c,
-        "eos param: d [?]"  => x.d,
-    )
-end
+load(::Type{T}; names, component_dbs, mix_eos_db) where {T<:AbstractEoSMixture} = error("NotImpemented")

@@ -76,7 +76,7 @@ function vt_split(
 ) where {T}
     # Renaming
     saturation = __find_saturation_negative_helmdiff(mix, nmol, volume, RT, concentration;
-        maxsaturation=0.25,
+        maxsaturation=1,
         maxiter=50,
         scale=0.5,
         helmdifftol=-1e-7/RT,

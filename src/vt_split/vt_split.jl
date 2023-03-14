@@ -133,6 +133,7 @@ function vt_split!(
     constrain_step = let
         physical_constrain_step = physical_constrain_step_closure(
             StateVariables,
+            physical_constrain_step_lowlims(StateVariables, nmol, volume),
             physical_constrain_step_uplims(StateVariables, nmol, volume),
         )
         __vt_split_step_closure(

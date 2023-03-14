@@ -28,12 +28,37 @@ function nmolvol(s::AbstractVTSplitState, nmolb::V, volumeb::T) where {V, T}
     return nmolvol!(nmol, s, nmolb, volumeb)
 end
 
-"Vector of upper limits for physical constraint for given state variables."
-physical_constrain_step_uplims(::Type{<:AbstractVTSplitState}, nmolbase, volumebase) = error("NotImplemented")
+# TODO: refactor names of `physical_constrain_step_*lims`: low/high, down/up, bottom/top?..
 
-# Creates closure of physical constrains `0 < x + α d < xuplims`.
+"""
+    CubicEoS.physical_constrain_step_lowlims(::Type{<:AbstractVTSplitState}, nmolbase, volumebase)
+    -> Vector of size size(nmolbase, 1) + 1
+
+Vector of lower limits for physical constraint for given state variables.
+
+By default, consists of zeros. This is suitable, for example, when state is represented by moles and volume.
+
+See also [`CubicEoS.physical_constrain_step_uplims`](@ref).
+"""
+physical_constrain_step_lowlims(::Type{<:AbstractVTSplitState}, nmolbase, volumebase) = zeros(size(nmolbase, 1) + 1)
+
+"""
+    CubicEoS.physical_constrain_step_uplims(::Type{<:AbstractVTSplitState}, nmolbase, volumebase)
+
+**Must be implemented**. Vector of upper limits for physical constraint for given state variables.
+
+For example, when state is represented by moles and volume, the uplims are `[nmolbase; volumebase]`.
+
+See also [`CubicEoS.physical_constrain_step_lowlims`](@ref).
+"""
+physical_constrain_step_uplims(::Type{<:AbstractVTSplitState}, nmolbase, volumebase) = error("NotImplemented: CubicEoS.physical_constrain_step_uplims")
+
+
+# Creates closure of physical constraints `xlowlims < x + α d < xuplims`.
+# The closure defines bounds for step magnitude.
 function physical_constrain_step_closure(
     ::Type{<:AbstractVTSplitState},
+    xlowlims::AbstractVector,
     xuplims::AbstractVector,
 )
     function clsr(
@@ -41,18 +66,22 @@ function physical_constrain_step_closure(
         x::AbstractVector,
         direction::AbstractVector,
     )
-        αmax = Inf
-        for (i, (xi, di, ui)) in enumerate(zip(x, direction, xuplims))
-            if iszero(di) && !(0 < xi < ui)
+        # Solving of low[i] < x[i] + α * d[i] < high[i] for α and all i-s.
+
+        αmax, αlow = Inf, -Inf
+        for (i, (xi, di, li, ui)) in enumerate(zip(x, direction, xlowlims, xuplims))
+            if iszero(di) && !(li < xi < ui)
+                # Zero direction, but current value is outside bounds.
                 throw(ConstrainStepZeroDirectionError(i, xi))
             end
-            αmax = di < 0 ? min(αmax, -xi/di) : min(αmax, (ui - xi)/di)
-        end
 
-        αlow = -Inf
-        for (xi, di, ui) in zip(x, direction, xuplims)
-            # Zero direction is checked above
-            αlow = di > 0 ? max(αlow, -xi/di) : max(αlow, (ui - xi)/di)
+            lbound, ubound = (li - xi)/di, (ui - xi)/di
+
+            αlow_candidate = di > 0 ? lbound : ubound
+            αlow = max(αlow, αlow_candidate)
+
+            αmax_candidate = di < 0 ? lbound : ubound
+            αmax = min(αmax, αmax_candidate)
         end
         return αlow, αmax
     end

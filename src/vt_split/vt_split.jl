@@ -129,6 +129,8 @@ function vt_split!(
     hessian = Matrix{Float64}(undef, (size(statex, 1), size(statex, 1)))
     hessian = hessian!(hessian, state, mix, nmol, volume, RT)
 
+    # hessian = diagm(0 => ones(size(statex, 1)))
+
     # Construction of step-closure from physical and eos constraints
     constrain_step = let
         physical_constrain_step = physical_constrain_step_closure(
@@ -193,7 +195,6 @@ function __vt_split_helmdiff_closure(
 
         Δa = (a1 + a2) - helmb
         grad = gradient!(grad, state1, mix, nmolb, volumeb, RT; buf=buf)
-
         return Δa, grad
     end
 

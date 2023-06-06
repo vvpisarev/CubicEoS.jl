@@ -38,7 +38,7 @@ function concentrationwithlowesttpd(vt_stab_tries)
     Dmin = Inf
     index_min = -1
     for (i, state) in enumerate(vt_stab_tries)
-        if state.issuccess && !state.isstable && state.energy_density < Dmin
+        if state.issuccess && state.energy_density < Dmin
             index_min = i
             Dmin = state.energy_density
         end

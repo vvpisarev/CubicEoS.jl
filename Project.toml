@@ -1,7 +1,7 @@
 name = "CubicEoS"
 uuid = "0772a1fa-d924-41f2-9f07-889679823dc5"
 authors = ["Vasily Pisarev <pisarevvv@phystech.edu>", "Stepan Zakharov <stepanzh@gmail.com>"]
-version = "0.3.0"
+version = "0.3.1"
 
 [deps]
 CubicEoSDatabase = "8742253c-1987-415f-b31d-1ec9670d9ed7"
